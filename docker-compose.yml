@@ -1,0 +1,12 @@
+services:
+  backoffridge:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      API_KEY: ${API_KEY}
+      PORT: 3000
+      DB_PATH: /data/inventory.db
+    volumes:
+      - ./data:/data

@@ -1,0 +1,13 @@
+{
+  "name": "backoffridge-server",
+  "version": "1.0.0",
+  "description": "Inventory tracker for food and household items",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "express": "^4.21.0"
+  }
+}

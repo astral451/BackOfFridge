@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BackOfFridge</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>BackOfFridge</h1>
+    <div id="stats" class="stats"></div>
+  </header>
+
+  <div id="keyGate" class="key-gate">
+    <p>Enter your access key to continue:</p>
+    <input type="password" id="keyInput" placeholder="access key">
+    <button id="keySave">Save</button>
+  </div>
+
+  <main id="app" class="hidden">
+    <section class="add-form">
+      <h2>Log a purchase</h2>
+      <form id="itemForm">
+        <input type="text" id="f-name" placeholder="Item name" required>
+        <select id="f-category">
+          <option value="perishable">Perishable</option>
+          <option value="nonperishable">Non-perishable</option>
+        </select>
+        <input type="text" id="f-location" placeholder="Location (fridge, freezer, pantry...)" list="locationList">
+        <datalist id="locationList"></datalist>
+        <input type="number" id="f-quantity" placeholder="Qty" step="any" value="1">
+        <input type="text" id="f-unit" placeholder="Unit (oz, lbs, count...)">
+        <label>Purchased <input type="date" id="f-purchase"></label>
+        <label>Expires <input type="date" id="f-expiration"></label>
+        <input type="text" id="f-notes" placeholder="Notes">
+        <button type="submit">Add item</button>
+      </form>
+    </section>
+
+    <section class="filters">
+      <label><input type="checkbox" id="filterActiveOnly" checked> Active only</label>
+      <label>Location: <select id="filterLocation"><option value="">All</option></select></label>
+      <button id="refreshBtn">Refresh</button>
+    </section>
+
+    <section>
+      <table id="itemsTable">
+        <thead>
+          <tr>
+            <th>Name</th><th>Category</th><th>Location</th><th>Qty</th>
+            <th>Purchased</th><th>Expires</th><th>Status</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="itemsBody"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,81 @@
+* { box-sizing: border-box; }
+body {
+  font-family: -apple-system, Helvetica, Arial, sans-serif;
+  margin: 0;
+  padding: 1rem;
+  background: #fafafa;
+  color: #222;
+}
+header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+h1 { font-size: 1.4rem; margin: 0; }
+.stats { font-size: 0.9rem; color: #555; }
+.hidden { display: none; }
+.key-gate {
+  max-width: 400px;
+  margin: 3rem auto;
+  text-align: center;
+}
+.key-gate input { width: 60%; padding: 0.5rem; }
+.key-gate button { padding: 0.5rem 1rem; }
+
+.add-form form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+.add-form input, .add-form select {
+  padding: 0.4rem;
+  flex: 1 1 140px;
+}
+.add-form button {
+  padding: 0.5rem 1rem;
+}
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  font-size: 0.9rem;
+}
+th, td {
+  border: 1px solid #ddd;
+  padding: 0.4rem 0.5rem;
+  text-align: left;
+}
+th { background: #f0f0f0; }
+tr.expired { background: #ffe3e3; }
+tr.expiring-soon { background: #fff6d8; }
+tr.thrown_out, tr.consumed { opacity: 0.5; }
+
+button.small {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.8rem;
+  margin-right: 0.25rem;
+}
+
+@media (max-width: 600px) {
+  table, thead, tbody, th, td, tr { display: block; }
+  thead { display: none; }
+  tr { margin-bottom: 0.75rem; border: 1px solid #ccc; }
+  td { border: none; border-bottom: 1px solid #eee; }
+  td::before {
+    content: attr(data-label);
+    font-weight: bold;
+    display: inline-block;
+    width: 100px;
+  }
+}
