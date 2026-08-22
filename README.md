@@ -24,6 +24,44 @@ items — just set `category: "nonperishable"` and leave `expiration_date` blank
 
 ## Running it
 
+### Prerequisites
+
+You need either Node.js (which includes `npm`) or Docker — not both. Pick whichever
+path below you plan to use.
+
+**Installing Node.js + npm:**
+
+- **macOS:** `brew install node` (install [Homebrew](https://brew.sh) first if you
+  don't have it), or download the installer from
+  [nodejs.org](https://nodejs.org/) (choose the LTS version).
+- **Windows:** download the LTS installer from [nodejs.org](https://nodejs.org/) and
+  run it — npm is included automatically. Or, if you use
+  [winget](https://learn.microsoft.com/windows/package-manager/winget/):
+  `winget install OpenJS.NodeJS.LTS`.
+- **Linux (Debian/Ubuntu):** the version in `apt` is often old, so use NodeSource:
+  ```bash
+  curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+  sudo apt install -y nodejs
+  ```
+- **Any OS via nvm** (lets you manage multiple Node versions):
+  ```bash
+  curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+  nvm install --lts
+  ```
+
+Verify it worked:
+
+```bash
+node -v
+npm -v
+```
+
+**Installing Docker** (if you'd rather skip Node/npm entirely — the container builds
+the app itself): install [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+(macOS/Windows) or, on Linux, follow the
+[official install guide](https://docs.docker.com/engine/install/) for your
+distribution. Verify with `docker --version` and `docker compose version`.
+
 ### Local (no Docker)
 
 ```bash
@@ -35,6 +73,8 @@ API_KEY=some-secret npm start
 Visit `http://localhost:3000`.
 
 ### Docker (recommended for the home server)
+
+No Node.js/npm needed on the host for this path — Docker builds it inside the image.
 
 ```bash
 cp .env.example .env   # then edit API_KEY
