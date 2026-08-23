@@ -29,4 +29,13 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_items_expiration ON items(expiration_date);
 `);
 
+// Migration: add columns used to support undoing the last consume/throw-out.
+const existingColumns = db.prepare("PRAGMA table_info(items)").all().map((c) => c.name);
+if (!existingColumns.includes('prev_status')) {
+  db.exec('ALTER TABLE items ADD COLUMN prev_status TEXT');
+}
+if (!existingColumns.includes('prev_quantity')) {
+  db.exec('ALTER TABLE items ADD COLUMN prev_quantity REAL');
+}
+
 module.exports = db;

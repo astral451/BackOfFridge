@@ -51,6 +51,23 @@
     return Math.round((target - today) / 86400000);
   }
 
+  // Returns a body object for the throw-out/consume request, or null if the
+  // user cancelled. Only asks when there's more than one unit on hand.
+  function promptQuantity(item, verb) {
+    if (!(item.quantity > 1)) return {};
+    var input = window.prompt(
+      'How many "' + item.name + '" to mark as ' + verb + '? (' + item.quantity + ' on hand)',
+      item.quantity
+    );
+    if (input === null) return null;
+    var qty = parseFloat(input);
+    if (!(qty > 0)) {
+      alert('Enter a positive number.');
+      return null;
+    }
+    return { quantity: qty };
+  }
+
   function rowClass(item) {
     if (item.status !== 'active') return item.status;
     var d = daysUntil(item.expiration_date);
@@ -89,16 +106,35 @@
         throwBtn.textContent = 'Throw out';
         throwBtn.className = 'small';
         throwBtn.addEventListener('click', function () {
-          apiFetch('/items/' + item.id + '/throw-out', { method: 'POST' }).then(refresh);
+          var body = promptQuantity(item, 'thrown out');
+          if (body === null) return;
+          apiFetch('/items/' + item.id + '/throw-out', { method: 'POST', body: JSON.stringify(body) })
+            .then(refresh)
+            .catch(function (err) { alert(err.message); });
         });
         var consumeBtn = document.createElement('button');
         consumeBtn.textContent = 'Consumed';
         consumeBtn.className = 'small';
         consumeBtn.addEventListener('click', function () {
-          apiFetch('/items/' + item.id + '/consume', { method: 'POST' }).then(refresh);
+          var body = promptQuantity(item, 'consumed');
+          if (body === null) return;
+          apiFetch('/items/' + item.id + '/consume', { method: 'POST', body: JSON.stringify(body) })
+            .then(refresh)
+            .catch(function (err) { alert(err.message); });
         });
         actionsTd.appendChild(throwBtn);
         actionsTd.appendChild(consumeBtn);
+      }
+      if (item.prev_status) {
+        var undoBtn = document.createElement('button');
+        undoBtn.textContent = 'Undo';
+        undoBtn.className = 'small';
+        undoBtn.addEventListener('click', function () {
+          apiFetch('/items/' + item.id + '/undo', { method: 'POST' })
+            .then(refresh)
+            .catch(function (err) { alert(err.message); });
+        });
+        actionsTd.appendChild(undoBtn);
       }
       var delBtn = document.createElement('button');
       delBtn.textContent = 'Delete';

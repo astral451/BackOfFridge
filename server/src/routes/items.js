@@ -101,27 +101,80 @@ router.patch('/:id', (req, res) => {
   res.json(serialize(row));
 });
 
-// POST /api/items/:id/throw-out - log that an item was thrown out
-router.post('/:id/throw-out', (req, res) => {
-  const existing = db.prepare('SELECT * FROM items WHERE id = ?').get(req.params.id);
-  if (!existing) return res.status(404).json({ error: 'not found' });
+// Reduce an active item's quantity by `amount` (or all of it if omitted/>=
+// remaining), setting `status` once none is left. Remembers the prior
+// status/quantity so a single /undo can reverse this call.
+function reduceQuantity(id, status, amount, extra) {
+  const existing = db.prepare('SELECT * FROM items WHERE id = ?').get(id);
+  if (!existing) return null;
 
-  const thrown_out_date = req.body.thrown_out_date || new Date().toISOString().slice(0, 10);
+  const remaining = amount === undefined || amount === null || amount >= existing.quantity
+    ? 0
+    : existing.quantity - amount;
+
   db.prepare(`
-    UPDATE items SET status='thrown_out', thrown_out_date=@thrown_out_date, updated_at=datetime('now')
-    WHERE id=@id
-  `).run({ id: req.params.id, thrown_out_date });
+    UPDATE items SET
+      quantity = @quantity,
+      status = @status,
+      prev_status = @prev_status,
+      prev_quantity = @prev_quantity,
+      thrown_out_date = @thrown_out_date,
+      updated_at = datetime('now')
+    WHERE id = @id
+  `).run({
+    id,
+    quantity: remaining,
+    status: remaining > 0 ? 'active' : status,
+    prev_status: existing.status,
+    prev_quantity: existing.quantity,
+    thrown_out_date: remaining > 0 ? existing.thrown_out_date : (extra && extra.thrown_out_date) || null,
+  });
 
-  const row = db.prepare('SELECT * FROM items WHERE id = ?').get(req.params.id);
+  return db.prepare('SELECT * FROM items WHERE id = ?').get(id);
+}
+
+// POST /api/items/:id/throw-out - log that some or all of an item was thrown out.
+// Body: { quantity? } - amount to remove; omit to throw out everything remaining.
+router.post('/:id/throw-out', (req, res) => {
+  if (req.body.quantity !== undefined && !(req.body.quantity > 0)) {
+    return res.status(400).json({ error: 'quantity must be a positive number' });
+  }
+  const thrown_out_date = req.body.thrown_out_date || new Date().toISOString().slice(0, 10);
+  const row = reduceQuantity(req.params.id, 'thrown_out', req.body.quantity, { thrown_out_date });
+  if (!row) return res.status(404).json({ error: 'not found' });
   res.json(serialize(row));
 });
 
-// POST /api/items/:id/consume - log that an item was used up
+// POST /api/items/:id/consume - log that some or all of an item was used up.
+// Body: { quantity? } - amount to remove; omit to consume everything remaining.
 router.post('/:id/consume', (req, res) => {
+  if (req.body.quantity !== undefined && !(req.body.quantity > 0)) {
+    return res.status(400).json({ error: 'quantity must be a positive number' });
+  }
+  const row = reduceQuantity(req.params.id, 'consumed', req.body.quantity);
+  if (!row) return res.status(404).json({ error: 'not found' });
+  res.json(serialize(row));
+});
+
+// POST /api/items/:id/undo - reverse the last consume/throw-out call on this item
+router.post('/:id/undo', (req, res) => {
   const existing = db.prepare('SELECT * FROM items WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'not found' });
+  if (existing.prev_status === null) {
+    return res.status(400).json({ error: 'nothing to undo' });
+  }
 
-  db.prepare(`UPDATE items SET status='consumed', updated_at=datetime('now') WHERE id=?`).run(req.params.id);
+  db.prepare(`
+    UPDATE items SET
+      status = @prev_status,
+      quantity = @prev_quantity,
+      prev_status = NULL,
+      prev_quantity = NULL,
+      thrown_out_date = CASE WHEN @prev_status = 'thrown_out' THEN thrown_out_date ELSE NULL END,
+      updated_at = datetime('now')
+    WHERE id = @id
+  `).run({ id: req.params.id, prev_status: existing.prev_status, prev_quantity: existing.prev_quantity });
+
   const row = db.prepare('SELECT * FROM items WHERE id = ?').get(req.params.id);
   res.json(serialize(row));
 });

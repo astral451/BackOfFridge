@@ -130,8 +130,9 @@ All routes below require the `x-api-key` header.
 | GET | `/api/items/:id` | Get one item |
 | POST | `/api/items` | Log a purchase (`name` required; `category`, `location`, `quantity`, `unit`, `purchase_date`, `expiration_date`, `notes` optional) |
 | PATCH | `/api/items/:id` | Update any field |
-| POST | `/api/items/:id/throw-out` | Mark thrown out (sets `status` + `thrown_out_date`, defaults to today) |
-| POST | `/api/items/:id/consume` | Mark used up |
+| POST | `/api/items/:id/throw-out` | Throw out some or all of an item. Body `{ quantity? }` — omit to throw out everything remaining, or pass a number to remove just that many (item stays `active` with the reduced quantity) |
+| POST | `/api/items/:id/consume` | Same as above, but marks it `consumed` instead of `thrown_out` |
+| POST | `/api/items/:id/undo` | Reverse the most recent throw-out/consume call on this item (one level of undo) |
 | DELETE | `/api/items/:id` | Remove an item |
 | GET | `/api/locations` | Distinct locations already in use, for autocomplete |
 | GET | `/api/stats` | Counts: active / expiring soon (≤3 days) / expired |
