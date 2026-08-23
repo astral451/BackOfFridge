@@ -24,6 +24,15 @@
   per-family list or per-location settings yet).
 - **Barcode/visual scanning** — scan a barcode or product photo to quickly
   re-up an item instead of retyping it (builds on "Buy again").
+- **Favorites filter** — surface the most-purchased items for quick re-up.
+  Needs a purchase-count aggregate by item name (current schema tracks each
+  purchase as its own row, with no rollup by name yet — counting is a
+  `GROUP BY name` query, cheap to add).
+- **Dedicated expiration view** — a view sorted/grouped by days-until-expiry
+  across all locations, not just the count on the dashboard. The items list
+  already sorts by expiration date and color-codes soon/expired rows, so this
+  is mostly a focused view/page on data already being tracked, rather than
+  new tracking.
 
 ## Open design question: multi-family data isolation
 
