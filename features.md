@@ -53,5 +53,33 @@ building login, since it shapes the schema and every query:
   each family would need their own container/URL, closer to what you have
   today for a single household.
 
-None of this is built yet — this is a placeholder for the decision once
-login work starts.
+**Decision: shared DB, tightly controlled queries.**
+
+The concern raised: if a client can influence which family's rows a query
+returns (e.g. a `family_id` in a URL param or request body), that's an IDOR
+(Insecure Direct Object Reference) — anyone who guesses/changes that value
+reads another family's data. That's a real risk, but it's a risk in *how
+queries are written*, not in sharing one database file. Handled correctly,
+this is the same model most multi-tenant SaaS apps use (one shared database,
+isolated per customer entirely through server-enforced scoping) — e.g.
+Stripe and GitHub both work this way.
+
+The rule that makes it safe: **the server derives `family_id` from
+server-side auth state (the logged-in session), never from anything the
+client sends.** A request can't ask for another family's data because no
+parameter exists that would let it — there's nothing to tamper with.
+
+To make that hold structurally rather than by developer discipline alone:
+- Every data-access function takes `family_id` as a required first
+  argument — e.g. `getItems(familyId, filters)` — so it's a compile-time-ish
+  error to write a query that forgets it, rather than a habit to remember
+  route by route.
+- The `family_id` value itself only ever comes from the authenticated
+  session in middleware, attached to `req`, never read from `req.query`,
+  `req.body`, or `req.params`.
+- New endpoints get a quick check in review: does this handler's query take
+  `family_id` from the session-derived value, not from client input?
+
+If this stops feeling sufficient later, the fallback is the separate-SQLite-
+file-per-family option above, which enforces isolation at the filesystem
+level instead of the query level — but that's not needed today.
