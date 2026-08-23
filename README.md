@@ -43,7 +43,10 @@ path below you plan to use.
   curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
   sudo apt install -y nodejs
   ```
-- **Any OS via nvm** (lets you manage multiple Node versions):
+- **macOS/Linux via nvm** (lets you manage multiple Node versions — requires
+  `bash`, so this is not for Windows/PowerShell; Windows users should use the
+  installer or `winget` option above, or [nvm-windows](https://github.com/coreybutler/nvm-windows)
+  if you specifically want an nvm-style tool):
   ```bash
   curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
   nvm install --lts
