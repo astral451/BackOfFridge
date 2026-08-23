@@ -38,6 +38,16 @@ path below you plan to use.
   run it — npm is included automatically. Or, if you use
   [winget](https://learn.microsoft.com/windows/package-manager/winget/):
   `winget install OpenJS.NodeJS.LTS`.
+
+  If `node -v` works afterward but `npm -v` fails with
+  `File ... npm.ps1 cannot be loaded because running scripts is disabled on this
+  system`, PowerShell's execution policy is blocking it (npm itself is fine).
+  Fix it by opening PowerShell **as Administrator** and running:
+  ```powershell
+  Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+  ```
+  Confirm with `Y`, then close that window and try `npm -v` again in a normal
+  PowerShell window.
 - **Linux (Debian/Ubuntu):** the version in `apt` is often old, so use NodeSource:
   ```bash
   curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
