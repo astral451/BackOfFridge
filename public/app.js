@@ -68,6 +68,23 @@
     return { quantity: qty };
   }
 
+  // Pre-fills the purchase form from an existing item, so buying more of
+  // something already tracked doesn't mean retyping name/category/location/unit.
+  // Quantity, purchase date, and expiration are left for the user since those
+  // typically differ on a new purchase.
+  function fillFormFromItem(item) {
+    document.getElementById('f-name').value = item.name;
+    document.getElementById('f-category').value = item.category;
+    document.getElementById('f-location').value = item.location;
+    document.getElementById('f-unit').value = item.unit;
+    document.getElementById('f-quantity').value = item.quantity > 0 ? item.quantity : 1;
+    document.getElementById('f-purchase').value = new Date().toISOString().slice(0, 10);
+    document.getElementById('f-expiration').value = '';
+    document.getElementById('f-notes').value = '';
+    document.querySelector('.add-form').scrollIntoView({ behavior: 'smooth' });
+    document.getElementById('f-expiration').focus();
+  }
+
   function rowClass(item) {
     if (item.status !== 'active') return item.status;
     var d = daysUntil(item.expiration_date);
@@ -136,6 +153,14 @@
         });
         actionsTd.appendChild(undoBtn);
       }
+      var buyAgainBtn = document.createElement('button');
+      buyAgainBtn.textContent = 'Buy again';
+      buyAgainBtn.className = 'small';
+      buyAgainBtn.addEventListener('click', function () {
+        fillFormFromItem(item);
+      });
+      actionsTd.appendChild(buyAgainBtn);
+
       var delBtn = document.createElement('button');
       delBtn.textContent = 'Delete';
       delBtn.className = 'small';
