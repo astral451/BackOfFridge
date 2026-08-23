@@ -77,10 +77,20 @@ distribution. Verify with `docker --version` and `docker compose version`.
 
 ### Local (no Docker)
 
+**macOS/Linux (bash/zsh):**
 ```bash
 cd server
 npm install
 API_KEY=some-secret npm start
+```
+
+**Windows (PowerShell)** — inline `VAR=value command` syntax isn't valid PowerShell,
+so set the environment variable as its own statement first:
+```powershell
+cd server
+npm install
+$env:API_KEY="some-secret"
+npm start
 ```
 
 Visit `http://localhost:3000`.
