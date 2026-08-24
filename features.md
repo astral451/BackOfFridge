@@ -62,6 +62,20 @@
   behavior (public/app.js), which currently always prompts whenever quantity
   > 1 — the new default skips the prompt for the ordinary single-unit case
   and only asks when the person deliberately holds for it.
+- **Narrow-width layout: trim to the essentials** — on a constrained screen,
+  actively drop low-value fields instead of just reflowing everything.
+  Called out as non-critical at a glance: purchase date, category, and the
+  status column. What matters at a glance: is it expired or close to it,
+  and how much is left. This refines existing behavior rather than adding
+  responsiveness from scratch — `public/styles.css` already has a
+  `max-width: 600px` breakpoint that stacks the table into per-item cards,
+  but today that stacks *every* field (including the ones called out here
+  as unnecessary) rather than dropping any. Status is already conveyed
+  visually anyway via row color-coding (`rowClass` in `public/app.js`:
+  expired/expiring-soon/thrown_out/consumed) — dropping the redundant text
+  status column on narrow layouts loses no information, though it likely
+  needs a small legend since color alone isn't self-explanatory to a new
+  viewer of the page.
 - **Dedicated expiration view** — refined into two specific pages: an
   **Expired** page and an **Expiring soon (< 3 days)** page, rather than one
   general view. Both are filters over data already tracked (expiration_date +
