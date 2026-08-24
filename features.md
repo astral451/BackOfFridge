@@ -14,6 +14,9 @@
 - REST API (see README) protected by a shared `API_KEY`, documented as the
   future integration point for automation (e.g. voice logging).
 - Docker packaging, portable between a home server and a cloud host.
+- Access and purchase logging — every API request logs an ACCESS/ACCESS
+  DENIED line, purchases log a friendlier line, both to stdout and a
+  persisted log file (see README).
 
 ## Roadmap
 
