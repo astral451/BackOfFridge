@@ -46,26 +46,33 @@
 - **Low stock indicator** — flag an item as running low, so it shows up
   without having to notice the quantity yourself. Straightforward for
   countable items (e.g. paper towels: alert once quantity drops to/below a
-  threshold — likely a per-item or per-name "low stock at" number, since a
-  sensible threshold varies by item).
+  threshold), harder for bulk/bin items (a giant bag of dog food) where
+  quantity was never a meaningful discrete count to begin with.
 
-  Harder case, called out specifically: bulk/bin items like a giant bag of
-  dog food, where quantity was never a meaningful discrete count to begin
-  with, so it doesn't decrement per use the way a countable item does.
-  Quantity-based thresholds don't work here since there's no reliable
-  quantity being tracked. Candidate approaches, undecided:
-  - Manual status: a "running low" toggle/flag the person sets by eye,
-    independent of quantity.
-  - Estimated depletion date: infer roughly when it'll run out from the
-    average time between past purchases of that item (needs the favorites/
-    purchase-history aggregate above), surfacing it a few days before the
-    predicted date rather than tracking a count at all.
-  - A rough percentage-remaining field, updated manually on occasion (e.g.
-    "1/4 left"), converted to a threshold check instead of a unit count.
+  **Direction chosen: a visual fill-level meter**, not a numeric threshold.
+  A vertical slider/meter per item — drag it to roughly where the item is
+  (half full, a quarter left) — used for both the genuinely bulk case (the
+  dog food bin) and any item where eyeballing fullness is just easier than
+  counting units (a gallon of milk). Low-stock is then "fill level below
+  some threshold, e.g. 25%" rather than a unit count at all.
 
-  No decision yet — needs to be picked before building this, since it
-  determines whether it's a variant of the quantity system or a separate
-  mechanism entirely.
+  Implementation notes, not yet built:
+  - This is a different tracking mode from the existing numeric `quantity`
+    field, so items likely need a per-item choice of tracking mode — e.g.
+    `tracking_mode: 'count' | 'fill_level'` plus a `fill_percent` (0-100)
+    field — rather than replacing quantity outright, since plenty of items
+    (a 12-pack) are still better tracked as a count.
+  - Threshold for "running low" at the fill-level: still open — probably a
+    sensible global default (e.g. ≤25%) with a per-item override, since
+    "low" means something different for a bin you refill occasionally vs.
+    a jug you finish in a week.
+  - Interaction risk worth testing early: a true vertical range/slider
+    control has inconsistent cross-browser support (native `<input
+    type="range">` only orients vertically in some browsers; others need
+    CSS rotation tricks), and this app has already hit one instance of a
+    control not rendering usably on the Supernote's browser (the location
+    datalist). Worth a quick real-device check on Supernote before
+    committing to a specific slider implementation.
 
 ## Open design question: multi-family data isolation
 
