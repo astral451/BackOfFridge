@@ -37,11 +37,35 @@
   Needs a purchase-count aggregate by item name (current schema tracks each
   purchase as its own row, with no rollup by name yet — counting is a
   `GROUP BY name` query, cheap to add).
-- **Dedicated expiration view** — a view sorted/grouped by days-until-expiry
-  across all locations, not just the count on the dashboard. The items list
-  already sorts by expiration date and color-codes soon/expired rows, so this
-  is mostly a focused view/page on data already being tracked, rather than
-  new tracking.
+- **Dedicated expiration view** — refined into two specific pages: an
+  **Expired** page and an **Expiring soon (< 3 days)** page, rather than one
+  general view. Both are filters over data already tracked (expiration_date +
+  status), so this is close to a pure UI addition — reuse the existing
+  items-list rendering with a fixed filter instead of the location/status
+  dropdowns.
+- **Low stock indicator** — flag an item as running low, so it shows up
+  without having to notice the quantity yourself. Straightforward for
+  countable items (e.g. paper towels: alert once quantity drops to/below a
+  threshold — likely a per-item or per-name "low stock at" number, since a
+  sensible threshold varies by item).
+
+  Harder case, called out specifically: bulk/bin items like a giant bag of
+  dog food, where quantity was never a meaningful discrete count to begin
+  with, so it doesn't decrement per use the way a countable item does.
+  Quantity-based thresholds don't work here since there's no reliable
+  quantity being tracked. Candidate approaches, undecided:
+  - Manual status: a "running low" toggle/flag the person sets by eye,
+    independent of quantity.
+  - Estimated depletion date: infer roughly when it'll run out from the
+    average time between past purchases of that item (needs the favorites/
+    purchase-history aggregate above), surfacing it a few days before the
+    predicted date rather than tracking a count at all.
+  - A rough percentage-remaining field, updated manually on occasion (e.g.
+    "1/4 left"), converted to a threshold check instead of a unit count.
+
+  No decision yet — needs to be picked before building this, since it
+  determines whether it's a variant of the quantity system or a separate
+  mechanism entirely.
 
 ## Open design question: multi-family data isolation
 
