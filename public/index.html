@@ -27,8 +27,11 @@
           <option value="perishable">Perishable</option>
           <option value="nonperishable">Non-perishable</option>
         </select>
-        <input type="text" id="f-location" placeholder="Location (fridge, freezer, pantry...)" list="locationList">
-        <datalist id="locationList"></datalist>
+        <select id="f-location-select">
+          <option value="">Select location...</option>
+          <option value="__new__">+ Add new location...</option>
+        </select>
+        <input type="text" id="f-location-new" placeholder="New location name" class="hidden">
         <input type="number" id="f-quantity" placeholder="Qty" step="any" value="1">
         <input type="text" id="f-unit" placeholder="Unit (oz, lbs, count...)">
         <label>Purchased <input type="date" id="f-purchase"></label>

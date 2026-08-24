@@ -75,7 +75,8 @@
   function fillFormFromItem(item) {
     document.getElementById('f-name').value = item.name;
     document.getElementById('f-category').value = item.category;
-    document.getElementById('f-location').value = item.location;
+    document.getElementById('f-location-select').value = item.location;
+    document.getElementById('f-location-new').classList.add('hidden');
     document.getElementById('f-unit').value = item.unit;
     document.getElementById('f-quantity').value = item.quantity > 0 ? item.quantity : 1;
     document.getElementById('f-purchase').value = new Date().toISOString().slice(0, 10);
@@ -212,22 +213,31 @@
   }
 
   function renderLocations(locations) {
-    var listEl = document.getElementById('locationList');
-    var selectEl = document.getElementById('filterLocation');
-    listEl.innerHTML = '';
-    var currentVal = selectEl.value;
-    selectEl.innerHTML = '<option value="">All</option>';
+    var filterSelect = document.getElementById('filterLocation');
+    var currentFilterVal = filterSelect.value;
+    filterSelect.innerHTML = '<option value="">All</option>';
     locations.forEach(function (loc) {
-      var opt1 = document.createElement('option');
-      opt1.value = loc;
-      listEl.appendChild(opt1);
-
-      var opt2 = document.createElement('option');
-      opt2.value = loc;
-      opt2.textContent = loc;
-      selectEl.appendChild(opt2);
+      var opt = document.createElement('option');
+      opt.value = loc;
+      opt.textContent = loc;
+      filterSelect.appendChild(opt);
     });
-    selectEl.value = currentVal;
+    filterSelect.value = currentFilterVal;
+
+    var formSelect = document.getElementById('f-location-select');
+    var currentFormVal = formSelect.value;
+    formSelect.innerHTML = '<option value="">Select location...</option>';
+    locations.forEach(function (loc) {
+      var opt = document.createElement('option');
+      opt.value = loc;
+      opt.textContent = loc;
+      formSelect.appendChild(opt);
+    });
+    var addNewOpt = document.createElement('option');
+    addNewOpt.value = '__new__';
+    addNewOpt.textContent = '+ Add new location...';
+    formSelect.appendChild(addNewOpt);
+    formSelect.value = currentFormVal;
   }
 
   function refresh() {
@@ -243,12 +253,31 @@
     apiFetch('/locations').then(renderLocations);
   }
 
+  function currentFormLocation() {
+    var select = document.getElementById('f-location-select');
+    if (select.value === '__new__') {
+      return document.getElementById('f-location-new').value;
+    }
+    return select.value;
+  }
+
+  document.getElementById('f-location-select').addEventListener('change', function () {
+    var newInput = document.getElementById('f-location-new');
+    if (this.value === '__new__') {
+      newInput.classList.remove('hidden');
+      newInput.focus();
+    } else {
+      newInput.classList.add('hidden');
+      newInput.value = '';
+    }
+  });
+
   document.getElementById('itemForm').addEventListener('submit', function (e) {
     e.preventDefault();
     var payload = {
       name: document.getElementById('f-name').value,
       category: document.getElementById('f-category').value,
-      location: document.getElementById('f-location').value,
+      location: currentFormLocation(),
       quantity: parseFloat(document.getElementById('f-quantity').value) || 1,
       unit: document.getElementById('f-unit').value,
       purchase_date: document.getElementById('f-purchase').value || null,
@@ -258,6 +287,7 @@
     apiFetch('/items', { method: 'POST', body: JSON.stringify(payload) }).then(function () {
       e.target.reset();
       document.getElementById('f-category').value = 'perishable';
+      document.getElementById('f-location-new').classList.add('hidden');
       refresh();
     }).catch(function (err) {
       alert(err.message);
