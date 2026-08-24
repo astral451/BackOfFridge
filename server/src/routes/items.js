@@ -1,5 +1,6 @@
 const express = require('express');
 const db = require('../db');
+const { log } = require('../logger');
 
 const router = express.Router();
 
@@ -70,6 +71,7 @@ router.post('/', (req, res) => {
   `).run({ name, category, location, quantity, unit, purchase_date, expiration_date, notes });
 
   const row = db.prepare('SELECT * FROM items WHERE id = ?').get(result.lastInsertRowid);
+  log(`PURCHASED "${row.name}" x${row.quantity}${row.unit ? ' ' + row.unit : ''} -> ${row.location || 'unspecified location'}`);
   res.status(201).json(serialize(row));
 });
 

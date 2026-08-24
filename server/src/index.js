@@ -3,6 +3,7 @@ const express = require('express');
 
 const itemsRouter = require('./routes/items');
 const metaRouter = require('./routes/meta');
+const { log } = require('./logger');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -16,7 +17,11 @@ if (!API_KEY) {
 
 app.use('/api', (req, res, next) => {
   if (!API_KEY) return next();
-  if (req.get('x-api-key') === API_KEY) return next();
+  if (req.get('x-api-key') === API_KEY) {
+    log(`ACCESS ${req.method} ${req.originalUrl} from ${req.ip}`);
+    return next();
+  }
+  log(`ACCESS DENIED ${req.method} ${req.originalUrl} from ${req.ip}`);
   res.status(401).json({ error: 'unauthorized' });
 });
 

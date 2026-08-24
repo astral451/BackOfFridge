@@ -120,6 +120,19 @@ Options, cheapest first:
   on your router.
 - Traditional port-forward + your own domain/TLS if you want it fully public.
 
+## Logging
+
+Every API request logs an `ACCESS` (or `ACCESS DENIED` for a bad/missing key)
+line with the method, path, and requester IP, and purchases additionally log a
+friendlier `PURCHASED "name" x<qty> <unit> -> <location>` line. Each line is
+written both to stdout and to a local file, `<DB volume>/app.log` (so under
+Docker that's inside your `./data` bind mount, right next to `inventory.db` —
+same persistence, no extra volume needed).
+
+To watch it live: `docker compose logs -f` (handy to leave running in a
+`screen` session on the server). To read the persisted file directly:
+`tail -f ./data/app.log`.
+
 ## API (for future automation, e.g. a voice-logging skill)
 
 All routes below require the `x-api-key` header.
