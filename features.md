@@ -49,6 +49,14 @@
   foundation piece — and directly feeds two other roadmap items above: the
   favorites purchase-count and the low-stock estimated-depletion-date option
   both need exactly this kind of history to compute from.
+- **Live search** — a text box that filters the item list as you type, no
+  submit button. The app already loads the full active item list into the
+  page for the status/location filters, so this is likely a client-side
+  filter over that in-memory list (instant, no network round trip, no
+  debounce needed) rather than a new server endpoint — worth revisiting
+  only if the item list gets large enough that loading everything upfront
+  stops being practical. Matching field: item name at minimum; possibly
+  notes too, since location already has its own dedicated filter.
 - **Favorites filter** — surface the most-purchased items for quick re-up.
   Needs a purchase-count aggregate by item name (current schema tracks each
   purchase as its own row, with no rollup by name yet — counting is a
