@@ -33,6 +33,22 @@
   list needs to be scoped per family like everything else.
 - **Barcode/visual scanning** — scan a barcode or product photo to quickly
   re-up an item instead of retyping it (builds on "Buy again").
+- **Pattern and consumption tracking** — record every action (purchase,
+  consume, throw-out, edit, undo) with a timestamp, so trends over time
+  become answerable: how often something's rebought, how much of it
+  typically gets thrown out vs. used, which days it tends to get consumed,
+  etc.
+
+  This needs a real, structured, append-only event history — something the
+  app doesn't have today. What exists now is two things, neither of which
+  is this: the text log file (README's "Logging" section) is human-readable
+  lines in a file, not a queryable table; and `prev_status`/`prev_quantity`
+  on `items` is a single-slot memory for one-level undo, overwritten on the
+  next action, not a history. A proper `item_events` table (item id + name,
+  event type, quantity delta, from/to status, timestamp) would be the
+  foundation piece — and directly feeds two other roadmap items above: the
+  favorites purchase-count and the low-stock estimated-depletion-date option
+  both need exactly this kind of history to compute from.
 - **Favorites filter** — surface the most-purchased items for quick re-up.
   Needs a purchase-count aggregate by item name (current schema tracks each
   purchase as its own row, with no rollup by name yet — counting is a
