@@ -37,6 +37,15 @@
   Needs a purchase-count aggregate by item name (current schema tracks each
   purchase as its own row, with no rollup by name yet — counting is a
   `GROUP BY name` query, cheap to add).
+- **Quick +/- for single-serve items** — a faster path than the current
+  prompt for the common case of "used one." Direction: tapping Consume
+  normally decrements by 1 immediately (no prompt), and a long-press opens
+  the existing quantity prompt for anything other than 1 (a specific amount,
+  or the whole remaining quantity). Throw-out likely gets the same tap/
+  long-press split for consistency. This changes today's `promptQuantity`
+  behavior (public/app.js), which currently always prompts whenever quantity
+  > 1 — the new default skips the prompt for the ordinary single-unit case
+  and only asks when the person deliberately holds for it.
 - **Dedicated expiration view** — refined into two specific pages: an
   **Expired** page and an **Expiring soon (< 3 days)** page, rather than one
   general view. Both are filters over data already tracked (expiration_date +
