@@ -11,6 +11,10 @@
 - "Buy again" — pre-fills the purchase form from an existing item.
 - Edit an item's location or quantity directly (PATCH endpoint already
   supported any field; this exposes location/quantity in the UI).
+- Locations are now a managed list (their own table, not just whatever text
+  happens to be on items): a "Manage locations" page shows each location with
+  its item count, lets you add a new one, and delete an unused one (deletion
+  is refused if any item still references it).
 - Dashboard stats: active / expiring soon (≤3 days) / expired counts.
 - Filter by status and location.
 - REST API (see README) protected by a shared `API_KEY`, documented as the
@@ -24,9 +28,9 @@
 
 - **Login for multiple families** — accounts so more than one household can
   use the same deployment without seeing each other's data.
-- **Location customization** — let a family define and manage their own named
-  storage locations (currently free text with autocomplete; no dedicated
-  per-family list or per-location settings yet).
+- **Location customization** — shipped for a single household (locations are
+  now a managed list with add/delete). Once multi-family login exists, this
+  list needs to be scoped per family like everything else.
 - **Barcode/visual scanning** — scan a barcode or product photo to quickly
   re-up an item instead of retyping it (builds on "Buy again").
 - **Favorites filter** — surface the most-purchased items for quick re-up.

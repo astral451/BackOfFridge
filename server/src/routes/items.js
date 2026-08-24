@@ -69,6 +69,7 @@ router.post('/', (req, res) => {
     INSERT INTO items (name, category, location, quantity, unit, purchase_date, expiration_date, notes)
     VALUES (@name, @category, @location, @quantity, @unit, @purchase_date, @expiration_date, @notes)
   `).run({ name, category, location, quantity, unit, purchase_date, expiration_date, notes });
+  db.ensureLocation(location);
 
   const row = db.prepare('SELECT * FROM items WHERE id = ?').get(result.lastInsertRowid);
   log(`PURCHASED "${row.name}" x${row.quantity}${row.unit ? ' ' + row.unit : ''} -> ${row.location || 'unspecified location'}`);
@@ -98,6 +99,7 @@ router.patch('/:id', (req, res) => {
       status=@status, notes=@notes, updated_at=datetime('now')
     WHERE id=@id
   `).run(merged);
+  if (updates.location) db.ensureLocation(updates.location);
 
   const row = db.prepare('SELECT * FROM items WHERE id = ?').get(req.params.id);
   res.json(serialize(row));

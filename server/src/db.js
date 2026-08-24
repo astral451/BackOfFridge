@@ -38,4 +38,29 @@ if (!existingColumns.includes('prev_quantity')) {
   db.exec('ALTER TABLE items ADD COLUMN prev_quantity REAL');
 }
 
+// Locations are their own table so they can be managed (added/removed)
+// independently of whatever items currently happen to reference them.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS locations (
+    name TEXT PRIMARY KEY
+  );
+`);
+
+// Backfill: any location already used by an existing item becomes a managed
+// location, so nothing already in use silently disappears from the list.
+db.exec(`
+  INSERT OR IGNORE INTO locations (name)
+  SELECT DISTINCT location FROM items WHERE location != ''
+`);
+
+// Every location an item is set to (on create or edit) becomes a managed
+// location automatically, matching the "+ Add new location" flow in the
+// purchase form.
+function ensureLocation(name) {
+  if (name) {
+    db.prepare('INSERT OR IGNORE INTO locations (name) VALUES (?)').run(name);
+  }
+}
+
 module.exports = db;
+module.exports.ensureLocation = ensureLocation;

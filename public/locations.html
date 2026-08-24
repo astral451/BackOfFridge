@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BackOfFridge - Locations</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>Manage Locations</h1>
+    <a href="index.html">&larr; Back to inventory</a>
+  </header>
+
+  <div id="keyGate" class="key-gate">
+    <p>Enter your access key to continue:</p>
+    <input type="password" id="keyInput" placeholder="access key">
+    <button id="keySave">Save</button>
+  </div>
+
+  <main id="app" class="hidden">
+    <section class="add-form">
+      <h2>Add a location</h2>
+      <form id="locationForm">
+        <input type="text" id="l-name" placeholder="New location name" required>
+        <button type="submit">+ Add</button>
+      </form>
+    </section>
+
+    <section>
+      <table id="locationsTable">
+        <thead>
+          <tr><th>Location</th><th>Items</th><th>Actions</th></tr>
+        </thead>
+        <tbody id="locationsBody"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script src="locations.js"></script>
+</body>
+</html>

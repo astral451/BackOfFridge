@@ -147,7 +147,10 @@ All routes below require the `x-api-key` header.
 | POST | `/api/items/:id/consume` | Same as above, but marks it `consumed` instead of `thrown_out` |
 | POST | `/api/items/:id/undo` | Reverse the most recent throw-out/consume call on this item (one level of undo) |
 | DELETE | `/api/items/:id` | Remove an item |
-| GET | `/api/locations` | Distinct locations already in use, for autocomplete |
+| GET | `/api/locations` | Managed location names, for the purchase form/filter dropdowns |
+| GET | `/api/locations/detail` | Locations with a count of items currently referencing each, for the manage-locations page |
+| POST | `/api/locations` | Add a new location. Body `{ name }` |
+| DELETE | `/api/locations/:name` | Remove a location — fails with a 400 if any item still references it |
 | GET | `/api/stats` | Counts: active / expiring soon (≤3 days) / expired |
 
 This API is intentionally the integration point for the voice-logging idea: a Claude
