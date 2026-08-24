@@ -9,6 +9,8 @@
   the whole item.
 - Undo — reverse the most recent consume/throw-out on an item (one level).
 - "Buy again" — pre-fills the purchase form from an existing item.
+- Edit an item's location or quantity directly (PATCH endpoint already
+  supported any field; this exposes location/quantity in the UI).
 - Dashboard stats: active / expiring soon (≤3 days) / expired counts.
 - Filter by status and location.
 - REST API (see README) protected by a shared `API_KEY`, documented as the

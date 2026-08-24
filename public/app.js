@@ -85,6 +85,24 @@
     document.getElementById('f-expiration').focus();
   }
 
+  // Returns a partial-update body for PATCH /items/:id, or null if the user
+  // cancelled. Asks for location and quantity — the two fields people need to
+  // correct most often (moved it, or the count was wrong/changed).
+  function promptEdits(item) {
+    var location = window.prompt('Location for "' + item.name + '":', item.location || '');
+    if (location === null) return null;
+
+    var qtyInput = window.prompt('Quantity on hand for "' + item.name + '":', item.quantity);
+    if (qtyInput === null) return null;
+    var quantity = parseFloat(qtyInput);
+    if (!(quantity >= 0)) {
+      alert('Enter a number of zero or more.');
+      return null;
+    }
+
+    return { location: location, quantity: quantity };
+  }
+
   function rowClass(item) {
     if (item.status !== 'active') return item.status;
     var d = daysUntil(item.expiration_date);
@@ -153,6 +171,18 @@
         });
         actionsTd.appendChild(undoBtn);
       }
+      var editBtn = document.createElement('button');
+      editBtn.textContent = 'Edit';
+      editBtn.className = 'small';
+      editBtn.addEventListener('click', function () {
+        var updates = promptEdits(item);
+        if (updates === null) return;
+        apiFetch('/items/' + item.id, { method: 'PATCH', body: JSON.stringify(updates) })
+          .then(refresh)
+          .catch(function (err) { alert(err.message); });
+      });
+      actionsTd.appendChild(editBtn);
+
       var buyAgainBtn = document.createElement('button');
       buyAgainBtn.textContent = 'Buy again';
       buyAgainBtn.className = 'small';
