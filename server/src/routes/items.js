@@ -64,7 +64,7 @@ router.get('/:id/history', (req, res) => {
   if (!existing) return res.status(404).json({ error: 'not found' });
 
   const rows = db.prepare(`
-    SELECT event_type, detail, created_at FROM item_events
+    SELECT event_type, detail, username, created_at FROM item_events
     WHERE item_id = ? ORDER BY created_at DESC, id DESC
   `).all(req.params.id);
   res.json(rows.map((r) => ({ ...r, detail: r.detail ? JSON.parse(r.detail) : null })));
@@ -106,8 +106,8 @@ router.post('/', (req, res) => {
   db.ensureLocation(location);
 
   const row = db.prepare('SELECT * FROM items WHERE id = ?').get(result.lastInsertRowid);
-  db.recordEvent(row.id, row.name, 'purchased', { quantity: row.quantity, unit: row.unit, location: row.location });
-  log(`PURCHASED "${row.name}" x${row.quantity}${row.unit ? ' ' + row.unit : ''} -> ${row.location || 'unspecified location'}`);
+  db.recordEvent(row.id, row.name, 'purchased', { quantity: row.quantity, unit: row.unit, location: row.location }, req.username);
+  log(`PURCHASED "${row.name}" x${row.quantity}${row.unit ? ' ' + row.unit : ''} -> ${row.location || 'unspecified location'} by ${req.username}`);
   res.status(201).json(serialize(row));
 });
 
@@ -152,14 +152,14 @@ router.patch('/:id', (req, res) => {
   const onlyDatesChanged = changedFields.length > 0 && changedFields.every((f) => dateFields.includes(f));
 
   if (onlyFillPercentChanged) {
-    db.recordEvent(existing.id, existing.name, 'fill_level_set', { from: existing.fill_percent, to: updates.fill_percent });
+    db.recordEvent(existing.id, existing.name, 'fill_level_set', { from: existing.fill_percent, to: updates.fill_percent }, req.username);
   } else if (onlyDatesChanged) {
     // A date correction (e.g. fixing a wrong expiration) isn't a
     // consumption-pattern signal, so it's deliberately left out of
     // item_events - just noted in the plain text log.
-    log(`DATES EDITED "${existing.name}": ` + changedFields.map((f) => `${f} ${existing[f] || '(none)'} -> ${updates[f] || '(none)'}`).join(', '));
+    log(`DATES EDITED "${existing.name}" by ${req.username}: ` + changedFields.map((f) => `${f} ${existing[f] || '(none)'} -> ${updates[f] || '(none)'}`).join(', '));
   } else {
-    db.recordEvent(existing.id, existing.name, 'edited', updates);
+    db.recordEvent(existing.id, existing.name, 'edited', updates, req.username);
   }
 
   const row = db.prepare('SELECT * FROM items WHERE id = ?').get(req.params.id);
@@ -169,7 +169,7 @@ router.patch('/:id', (req, res) => {
 // Reduce an active item's quantity by `amount` (or all of it if omitted/>=
 // remaining), setting `status` once none is left. Remembers the prior
 // status/quantity so a single /undo can reverse this call.
-function reduceQuantity(id, status, amount, extra) {
+function reduceQuantity(id, status, amount, username, extra) {
   const existing = db.prepare('SELECT * FROM items WHERE id = ?').get(id);
   if (!existing) return null;
 
@@ -195,7 +195,7 @@ function reduceQuantity(id, status, amount, extra) {
     prev_quantity: existing.quantity,
     thrown_out_date: remaining > 0 ? existing.thrown_out_date : (extra && extra.thrown_out_date) || null,
   });
-  db.recordEvent(existing.id, existing.name, status, { quantity: removed, unit: existing.unit });
+  db.recordEvent(existing.id, existing.name, status, { quantity: removed, unit: existing.unit }, username);
 
   return db.prepare('SELECT * FROM items WHERE id = ?').get(id);
 }
@@ -207,7 +207,7 @@ router.post('/:id/throw-out', (req, res) => {
     return res.status(400).json({ error: 'quantity must be a positive number' });
   }
   const thrown_out_date = req.body.thrown_out_date || new Date().toISOString().slice(0, 10);
-  const row = reduceQuantity(req.params.id, 'thrown_out', req.body.quantity, { thrown_out_date });
+  const row = reduceQuantity(req.params.id, 'thrown_out', req.body.quantity, req.username, { thrown_out_date });
   if (!row) return res.status(404).json({ error: 'not found' });
   res.json(serialize(row));
 });
@@ -218,7 +218,7 @@ router.post('/:id/consume', (req, res) => {
   if (req.body.quantity !== undefined && !(req.body.quantity > 0)) {
     return res.status(400).json({ error: 'quantity must be a positive number' });
   }
-  const row = reduceQuantity(req.params.id, 'consumed', req.body.quantity);
+  const row = reduceQuantity(req.params.id, 'consumed', req.body.quantity, req.username);
   if (!row) return res.status(404).json({ error: 'not found' });
   res.json(serialize(row));
 });
@@ -241,7 +241,7 @@ router.post('/:id/undo', (req, res) => {
       updated_at = datetime('now')
     WHERE id = @id
   `).run({ id: req.params.id, prev_status: existing.prev_status, prev_quantity: existing.prev_quantity });
-  db.recordEvent(existing.id, existing.name, 'undo', { restored_status: existing.prev_status, restored_quantity: existing.prev_quantity });
+  db.recordEvent(existing.id, existing.name, 'undo', { restored_status: existing.prev_status, restored_quantity: existing.prev_quantity }, req.username);
 
   const row = db.prepare('SELECT * FROM items WHERE id = ?').get(req.params.id);
   res.json(serialize(row));
@@ -251,7 +251,7 @@ router.delete('/:id', (req, res) => {
   const existing = db.prepare('SELECT * FROM items WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'not found' });
   db.prepare('DELETE FROM items WHERE id = ?').run(req.params.id);
-  db.recordEvent(existing.id, existing.name, 'deleted', null);
+  db.recordEvent(existing.id, existing.name, 'deleted', null, req.username);
   res.status(204).end();
 });
 

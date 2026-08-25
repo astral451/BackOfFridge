@@ -1,20 +1,15 @@
 (function () {
-  var KEY_STORAGE = 'backoffridge_api_key';
-
-  function getKey() {
-    return localStorage.getItem(KEY_STORAGE) || '';
+  function redirectToLogin() {
+    window.location.href = 'login.html?next=' + encodeURIComponent(window.location.pathname.split('/').pop());
   }
 
   function apiFetch(path, opts) {
     opts = opts || {};
-    opts.headers = Object.assign({}, opts.headers, {
-      'Content-Type': 'application/json',
-      'x-api-key': getKey(),
-    });
+    opts.headers = Object.assign({}, opts.headers, { 'Content-Type': 'application/json' });
     return fetch('/api' + path, opts).then(function (res) {
       if (res.status === 401) {
-        showKeyGate();
-        throw new Error('unauthorized');
+        redirectToLogin();
+        throw new Error('not logged in');
       }
       if (!res.ok) {
         return res.json().then(function (body) {
@@ -26,21 +21,20 @@
     });
   }
 
-  function showKeyGate() {
-    document.getElementById('keyGate').classList.remove('hidden');
-    document.getElementById('app').classList.add('hidden');
+  function loadWhoAmI() {
+    fetch('/api/auth/me').then(function (res) {
+      if (!res.ok) {
+        redirectToLogin();
+        return null;
+      }
+      return res.json();
+    }).then(function (me) {
+      if (me) document.getElementById('whoami').textContent = 'Signed in as ' + me.username;
+    });
   }
 
-  function hideKeyGate() {
-    document.getElementById('keyGate').classList.add('hidden');
-    document.getElementById('app').classList.remove('hidden');
-  }
-
-  document.getElementById('keySave').addEventListener('click', function () {
-    var val = document.getElementById('keyInput').value.trim();
-    localStorage.setItem(KEY_STORAGE, val);
-    hideKeyGate();
-    init();
+  document.getElementById('logoutBtn').addEventListener('click', function () {
+    fetch('/api/auth/logout', { method: 'POST' }).then(redirectToLogin);
   });
 
   function daysUntil(dateStr) {
@@ -430,14 +424,6 @@
   document.getElementById('filterActiveOnly').addEventListener('change', refresh);
   document.getElementById('filterLocation').addEventListener('change', refresh);
 
-  function init() {
-    refresh();
-  }
-
-  if (getKey()) {
-    hideKeyGate();
-    init();
-  } else {
-    showKeyGate();
-  }
+  loadWhoAmI();
+  refresh();
 })();

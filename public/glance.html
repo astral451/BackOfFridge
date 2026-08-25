@@ -10,15 +10,11 @@
   <header>
     <h1>At a Glance</h1>
     <a href="index.html">&larr; Full inventory</a>
+    <span id="whoami" class="stats"></span>
+    <button id="logoutBtn" class="small">Log out</button>
   </header>
 
-  <div id="keyGate" class="key-gate">
-    <p>Enter your access key to continue:</p>
-    <input type="password" id="keyInput" placeholder="access key">
-    <button id="keySave">Save</button>
-  </div>
-
-  <main id="app" class="hidden">
+  <main id="app">
     <section class="filters">
       <label>Location: <select id="filterLocation"><option value="">All</option></select></label>
     </section>

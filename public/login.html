@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BackOfFridge - Log In</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>BackOfFridge</h1>
+  </header>
+
+  <div class="key-gate">
+    <div id="loginPane">
+      <p>Log in</p>
+      <input type="text" id="login-username" placeholder="username" autocomplete="username">
+      <input type="password" id="login-password" placeholder="password" autocomplete="current-password">
+      <button id="loginBtn">Log in</button>
+      <p><a href="#" id="showSignup">Need an account? Sign up</a></p>
+    </div>
+
+    <div id="signupPane" class="hidden">
+      <p>Create an account</p>
+      <input type="text" id="signup-username" placeholder="choose a username" autocomplete="username">
+      <input type="password" id="signup-password" placeholder="choose a password (6+ characters)" autocomplete="new-password">
+      <button id="signupBtn">Sign up</button>
+      <p><a href="#" id="showLogin">Already have an account? Log in</a></p>
+    </div>
+
+    <p id="authError" class="hidden" style="color: #b30000;"></p>
+  </div>
+
+  <script src="login.js"></script>
+</body>
+</html>

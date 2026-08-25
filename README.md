@@ -11,8 +11,11 @@ it's on wifi.
   database, low resource use. No build step.
 - **Frontend:** static HTML/CSS/vanilla JS served by the same server. No framework,
   no bundler — keeps it working in older/limited browsers like Supernote's.
-- **Auth:** a single shared `API_KEY`. The browser asks for it once and stores it in
-  `localStorage`; every API request sends it as the `x-api-key` header.
+- **Auth:** real per-person accounts (username + password), not a shared secret.
+  Logging in sets an httpOnly session cookie; the browser sends it automatically
+  on every request. One shared inventory — everyone who's signed up sees and
+  edits the same data (no per-family isolation; see `features.md` for why
+  that's deliberately out of scope for now). Sign up at `login.html`.
 
 ## Data model
 
@@ -39,6 +42,13 @@ exception: a PATCH that only changes `purchase_date`/`expiration_date` (the
 "Edit dates" button — for correcting a date mistake, not a consumption
 event) is left out of `item_events` since it isn't a usage pattern worth
 tracking, though it's still written to the plain text log below.
+
+Each `item_events` row also records the `username` of whoever did it, so
+"who reduced this already" is answerable in the history rather than
+everyone editing blind. `users` (username, bcrypt password hash) and
+`sessions` (opaque token, expiry) back the login system — hand-rolled
+rather than a session-store library, matching this project's preference
+for small, direct dependencies.
 
 ## Running it
 
@@ -95,34 +105,26 @@ distribution. Verify with `docker --version` and `docker compose version`.
 
 ### Local (no Docker)
 
-**macOS/Linux (bash/zsh):**
 ```bash
 cd server
 npm install
-API_KEY=some-secret npm start
-```
-
-**Windows (PowerShell)** — inline `VAR=value command` syntax isn't valid PowerShell,
-so set the environment variable as its own statement first:
-```powershell
-cd server
-npm install
-$env:API_KEY="some-secret"
 npm start
 ```
 
-Visit `http://localhost:3000`.
+Visit `http://localhost:3000` — it redirects to `login.html` since nobody's
+signed up yet. Sign up there to create the first account.
 
 ### Docker (recommended for the home server)
 
 No Node.js/npm needed on the host for this path — Docker builds it inside the image.
 
 ```bash
-cp .env.example .env   # then edit API_KEY
+cp .env.example .env
 docker compose up -d --build
 ```
 
-Data persists in `./data/inventory.db` on the host, so container rebuilds/restarts
+Visit `http://localhost:3000` and sign up to create the first account. Data
+persists in `./data/inventory.db` on the host, so container rebuilds/restarts
 don't lose anything.
 
 This same image runs unmodified on a cloud host (Fly.io, Render, a VPS, etc.) — point
@@ -134,9 +136,9 @@ The container only listens on the port you expose; it doesn't set up remote acce
 
 **If you currently have a router port forwarded straight to this app: stop.**
 A raw port-forward puts your home's public IP directly in front of internet
-scanners with no TLS, fronted by nothing but the app's single shared
-`API_KEY`. It's fine for a quick local test, but not for anything left running
-long-term. Close that port-forward once one of the options below is working.
+scanners with no TLS. It's fine for a quick local test, but not for anything
+left running long-term. Close that port-forward once one of the options
+below is working.
 
 Options, cheapest first:
 - **Tailscale / a WireGuard tunnel** on the home server — phone joins the same
@@ -208,10 +210,15 @@ To watch it live: `docker compose logs -f` (handy to leave running in a
 
 ## API (for future automation, e.g. a voice-logging skill)
 
-All routes below require the `x-api-key` header.
+Every route below except the `/api/auth/*` ones requires a valid session
+cookie (i.e. you're logged in as a real user — see "Auth" above).
 
 | Method | Path | Purpose |
 |---|---|---|
+| POST | `/api/auth/signup` | Create an account. Body `{ username, password }` (password 6+ chars). Logs you in. |
+| POST | `/api/auth/login` | Log in. Body `{ username, password }` |
+| POST | `/api/auth/logout` | Log out (clears the session) |
+| GET | `/api/auth/me` | Currently logged-in username, or 401 if not logged in |
 | GET | `/api/items` | List items. Filters: `status`, `location`, `category`, `expiring_within_days` |
 | GET | `/api/items/:id` | Get one item |
 | POST | `/api/items` | Log a purchase (`name` required; `category`, `location`, `quantity`, `unit`, `purchase_date`, `expiration_date`, `notes` optional) |
@@ -229,13 +236,17 @@ All routes below require the `x-api-key` header.
 
 This API is intentionally the integration point for the voice-logging idea: a Claude
 Code skill or connector can call these same endpoints once you decide how you want to
-reach it (e.g. a Cloudflare Tunnel URL + the `API_KEY`). That wiring wasn't built yet —
-worth a follow-up once the core tracker is in daily use.
+reach it (e.g. a Cloudflare Tunnel URL). It would need its own credential rather than
+a browser session cookie, though — a per-user personal access token, most likely.
+That hasn't been built; worth a follow-up once the core tracker is in daily use.
 
 ## Not built yet / ideas
 
 - Non-perishable-specific views (this session focused on the perishable/expiration
   workflow since that's the immediate need; the schema already supports both).
 - Push/email notifications for items expiring soon.
-- Voice input via a Claude skill hitting the API above.
-- Multi-user accounts (currently single shared API key).
+- Voice input via a Claude skill hitting the API above — needs the personal-access-token
+  idea mentioned just above first.
+- Full multi-family isolation (separate households on one shared deployment). Login is
+  per-user now, but everyone shares one inventory — see `features.md` for the shelved
+  design if this ever becomes necessary.

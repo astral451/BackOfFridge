@@ -17,8 +17,9 @@
   is refused if any item still references it).
 - Dashboard stats: active / expiring soon (≤3 days) / expired counts.
 - Filter by status and location.
-- REST API (see README) protected by a shared `API_KEY`, documented as the
-  future integration point for automation (e.g. voice logging).
+- REST API (see README), documented as the future integration point for
+  automation (e.g. voice logging) — originally protected by a shared
+  `API_KEY`, since replaced by real per-user login (below).
 - Docker packaging, portable between a home server and a cloud host.
 - Access and purchase logging — every API request logs an ACCESS/ACCESS
   DENIED line, purchases log a friendlier line, both to stdout and a
@@ -63,29 +64,30 @@
   covers both a free zero-setup Quick Tunnel for testing and a stable
   Named Tunnel for a permanent hostname). The `cloudflared` service in
   `docker-compose.yml` only starts if `TUNNEL_TOKEN` + `COMPOSE_PROFILES=tunnel`
-  are set, so a plain `docker compose up` is unaffected otherwise. This
-  doesn't touch the app itself — the per-user login item below is what
-  actually replaces the shared `API_KEY` before this is opened up widely.
+  are set, so a plain `docker compose up` is unaffected otherwise.
+- Per-user login — replaces the single shared `API_KEY` with real accounts
+  (username + password, hand-rolled session cookie/`sessions` table rather
+  than a session-store library). Deliberately scoped down from full
+  multi-family isolation: no `family_id`, no separate households, no
+  invite-code/join flow — one shared inventory, same as before, just with
+  per-person accounts instead of one password everyone knows. `item_events`
+  rows are now attributed to the `username` who caused them — the concrete
+  motivating case: if one family member already reduced the milk, another
+  checking the history sees that and doesn't duplicate the update.
+  Verified with curl (signup/login/logout, wrong password rejected, a
+  second user's action correctly attributed in another user's view of the
+  same item's history) and a headless-browser run of the actual signup →
+  redirect → logged-in flow. Full multi-family isolation is shelved below
+  as a distinct, larger, "only if actually needed" item — it isn't required
+  for this and wasn't built.
 
 ## Roadmap
 
-- **Login for multiple families** — accounts so more than one household can
-  use the same deployment without seeing each other's data.
-- **Per-user login** — replaces the single shared `API_KEY` with real
-  accounts (username + password, session cookie), so family members are
-  told apart. Deliberately scoped down from full multi-family isolation:
-  no `family_id`, no separate households, no invite-code/join flow — one
-  shared inventory, same as today, just with per-person accountability.
-  The concrete motivating case: `item_events` already records every action
-  (see above) but not *who* did it: adding `user_id`/`username` to those
-  records means if one family member already reduced the milk, another
-  checking the history can see that and not duplicate the update.
-  Full multi-family isolation (separate households on one deployment) is
-  shelved below as a distinct, larger, "only if actually needed" item —
-  it isn't required for this.
 - **Location customization** — shipped for a single household (locations are
-  now a managed list with add/delete). Once multi-family login exists, this
-  list needs to be scoped per family like everything else.
+  now a managed list with add/delete). If full multi-family isolation is
+  ever built (see the shelved item below), this list would need to be
+  scoped per family like everything else — not needed for the single
+  shared inventory this app has today.
 - **Barcode/visual scanning** — scan a barcode or product photo to quickly
   re-up an item instead of retyping it (builds on "Buy again").
 - **Live search** — a text box that filters the item list as you type, no

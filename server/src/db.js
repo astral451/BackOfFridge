@@ -83,11 +83,11 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_item_events_created ON item_events(created_at);
 `);
 
-function recordEvent(itemId, itemName, eventType, detail) {
+function recordEvent(itemId, itemName, eventType, detail, username) {
   db.prepare(`
-    INSERT INTO item_events (item_id, item_name, event_type, detail)
-    VALUES (?, ?, ?, ?)
-  `).run(itemId, itemName, eventType, detail ? JSON.stringify(detail) : null);
+    INSERT INTO item_events (item_id, item_name, event_type, detail, username)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(itemId, itemName, eventType, detail ? JSON.stringify(detail) : null, username || null);
 }
 
 // Migration: low-stock tracking. tracking_mode picks how an item signals
@@ -102,6 +102,35 @@ if (!existingColumns.includes('fill_percent')) {
 }
 if (!existingColumns.includes('low_stock_threshold')) {
   db.exec('ALTER TABLE items ADD COLUMN low_stock_threshold REAL');
+}
+
+// Per-user login (one shared inventory, not per-family isolation - see
+// features.md for why that's deliberately out of scope here). Sessions are
+// hand-rolled rather than using express-session, matching this project's
+// existing preference for small, direct dependencies.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS sessions (
+    token TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    expires_at TEXT NOT NULL
+  );
+`);
+
+// Migration: attribute item_events to the user who caused them, so "who
+// changed this" is answerable (the motivating case: one family member
+// reducing an item's quantity, another seeing that in the history instead
+// of reducing it again).
+const eventColumns = db.prepare("PRAGMA table_info(item_events)").all().map((c) => c.name);
+if (!eventColumns.includes('username')) {
+  db.exec('ALTER TABLE item_events ADD COLUMN username TEXT');
 }
 
 module.exports = db;
