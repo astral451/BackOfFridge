@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BackOfFridge - At a Glance</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>At a Glance</h1>
+    <a href="index.html">&larr; Full inventory</a>
+  </header>
+
+  <div id="keyGate" class="key-gate">
+    <p>Enter your access key to continue:</p>
+    <input type="password" id="keyInput" placeholder="access key">
+    <button id="keySave">Save</button>
+  </div>
+
+  <main id="app" class="hidden">
+    <table id="glanceTable">
+      <thead>
+        <tr><th>Name</th><th>Expires</th><th>Count</th></tr>
+      </thead>
+      <tbody id="glanceBody"></tbody>
+    </table>
+  </main>
+
+  <script src="glance.js"></script>
+</body>
+</html>

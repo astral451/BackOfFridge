@@ -44,11 +44,33 @@
   browser's implementation — still worth a real check on the Supernote's
   browser, since that's the device that already surfaced one rendering
   issue with a different control (the old location datalist).
+- "Edit dates" button — a dedicated action for correcting purchase/expiration
+  dates, separate from the location/quantity Edit button. Deliberately left
+  out of `item_events` (a date correction isn't a consumption-pattern
+  signal), though it's still written to the plain text log. Any edit that
+  touches a non-date field is unaffected and still tracked as before.
+- "At a Glance" view (`public/glance.html`) — a read-only page with just
+  name, days until expiration, and count/fill level, no edit controls. For
+  quickly checking status without the full inventory table, and a natural
+  fit if the app is ever shared with people who should see it but not edit
+  it (raised alongside the multi-family idea below). Reuses the same
+  expiration color-coding and low-stock badge as the main list, and the
+  existing mobile-stacked layout, since it's the same table/CSS pattern.
 
 ## Roadmap
 
 - **Login for multiple families** — accounts so more than one household can
   use the same deployment without seeing each other's data.
+- **Expose to the outside world, with protections** — currently reachable
+  only inside the home network. Making it reachable from anywhere (so other
+  family members can check the inventory away from home) needs real auth
+  beyond the current single shared `API_KEY` — likely per-person
+  credentials rather than one key everyone shares, plus a remote-access
+  path (Tailscale/Cloudflare Tunnel, as already noted in the README's
+  "Reaching it from your phone" section) rather than a raw port-forward.
+  The "At a Glance" read-only view above is a natural low-risk thing to
+  expose first, or to give non-editing family members, since it has no
+  mutating actions at all.
 - **Location customization** — shipped for a single household (locations are
   now a managed list with add/delete). Once multi-family login exists, this
   list needs to be scoped per family like everything else.
