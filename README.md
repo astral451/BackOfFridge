@@ -130,6 +130,27 @@ don't lose anything.
 This same image runs unmodified on a cloud host (Fly.io, Render, a VPS, etc.) — point
 it at that platform's persistent volume for `DB_PATH` instead of a local bind mount.
 
+### Backing up before pulling an update
+
+Worth doing before any `git pull` + `docker compose up --build`, since new
+code sometimes adds tables/columns to the database on startup. None of the
+migrations so far delete or rewrite existing data (only `CREATE TABLE IF NOT
+EXISTS` / `ALTER TABLE ADD COLUMN`), but backing up first costs nothing and
+means a bad upgrade is always recoverable:
+
+```bash
+cd ~/apps/BackOfFridge   # or wherever you cloned it
+docker compose stop
+cp -r data data-backup-$(date +%Y%m%d-%H%M%S)
+docker compose start
+```
+
+The `stop`/`start` around the copy matters: the database runs in WAL mode,
+so a copy taken while the app is running could miss very recent writes that
+are still sitting in `inventory.db-wal` rather than the main file — copying
+the whole (stopped) `data` folder avoids that. To restore, stop the
+container, swap `data` for the backed-up folder, and start it again.
+
 ### Reaching it from your phone / Supernote away from home
 
 The container only listens on the port you expose; it doesn't set up remote access.
