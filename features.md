@@ -50,12 +50,13 @@
   signal), though it's still written to the plain text log. Any edit that
   touches a non-date field is unaffected and still tracked as before.
 - "At a Glance" view (`public/glance.html`) — a read-only page with just
-  name, days until expiration, and count/fill level, no edit controls. For
-  quickly checking status without the full inventory table, and a natural
-  fit if the app is ever shared with people who should see it but not edit
-  it (raised alongside the multi-family idea below). Reuses the same
-  expiration color-coding and low-stock badge as the main list, and the
-  existing mobile-stacked layout, since it's the same table/CSS pattern.
+  name, location, days until expiration, and count/fill level, no edit
+  controls, plus a location filter. For quickly checking status without the
+  full inventory table, and a natural fit if the app is ever shared with
+  people who should see it but not edit it (raised alongside the
+  multi-family idea below). Reuses the same expiration color-coding and
+  low-stock badge as the main list, and the existing mobile-stacked layout,
+  since it's the same table/CSS pattern.
 
 ## Roadmap
 

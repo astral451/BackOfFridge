@@ -92,6 +92,11 @@
       }
       tr.appendChild(nameTd);
 
+      var locationTd = document.createElement('td');
+      locationTd.setAttribute('data-label', 'Location');
+      locationTd.textContent = item.location;
+      tr.appendChild(locationTd);
+
       var expiresTd = document.createElement('td');
       expiresTd.setAttribute('data-label', 'Expires');
       expiresTd.textContent = expiresText(item);
@@ -106,11 +111,33 @@
     });
   }
 
+  function renderLocations(locations) {
+    var selectEl = document.getElementById('filterLocation');
+    var currentVal = selectEl.value;
+    selectEl.innerHTML = '<option value="">All</option>';
+    locations.forEach(function (loc) {
+      var opt = document.createElement('option');
+      opt.value = loc;
+      opt.textContent = loc;
+      selectEl.appendChild(opt);
+    });
+    selectEl.value = currentVal;
+  }
+
   function refresh() {
-    apiFetch('/items?status=active').then(renderItems).catch(function (err) {
+    var params = new URLSearchParams({ status: 'active' });
+    var loc = document.getElementById('filterLocation').value;
+    if (loc) params.set('location', loc);
+
+    apiFetch('/items?' + params.toString()).then(renderItems).catch(function (err) {
+      alert(err.message);
+    });
+    apiFetch('/locations').then(renderLocations).catch(function (err) {
       alert(err.message);
     });
   }
+
+  document.getElementById('filterLocation').addEventListener('change', refresh);
 
   if (getKey()) {
     hideKeyGate();
