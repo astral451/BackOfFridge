@@ -104,6 +104,77 @@
     return { location: location, quantity: quantity };
   }
 
+  var DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+  // Returns a partial-update body of just date fields, or null if cancelled.
+  // Kept separate from promptEdits so a pure date correction (fixing a wrong
+  // expiration date) sends a PATCH containing only date fields - the server
+  // uses that to leave it out of consumption-pattern tracking.
+  function promptDates(item) {
+    var purchaseInput = window.prompt(
+      'Purchase date for "' + item.name + '" (YYYY-MM-DD, blank for none):',
+      item.purchase_date || ''
+    );
+    if (purchaseInput === null) return null;
+    if (purchaseInput !== '' && !DATE_PATTERN.test(purchaseInput)) {
+      alert('Enter a date as YYYY-MM-DD, or leave blank.');
+      return null;
+    }
+
+    var expirationInput = window.prompt(
+      'Expiration date for "' + item.name + '" (YYYY-MM-DD, blank for none):',
+      item.expiration_date || ''
+    );
+    if (expirationInput === null) return null;
+    if (expirationInput !== '' && !DATE_PATTERN.test(expirationInput)) {
+      alert('Enter a date as YYYY-MM-DD, or leave blank.');
+      return null;
+    }
+
+    return { purchase_date: purchaseInput || null, expiration_date: expirationInput || null };
+  }
+
+  // Builds a vertical fill-level meter: a normal horizontal <input
+  // type="range"> rotated with CSS (not the vendor-specific "orient" or
+  // "-webkit-appearance: slider-vertical" APIs, which only work in some
+  // browsers) so dragging works anywhere plain CSS transforms do. Updates a
+  // percent label live while dragging (no network calls); only PATCHes on
+  // release, so a slow connection isn't hit on every pixel of drag.
+  function buildFillMeter(item) {
+    var wrap = document.createElement('div');
+    wrap.className = 'fill-meter';
+
+    var track = document.createElement('div');
+    track.className = 'fill-meter-track';
+
+    var slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = 0;
+    slider.max = 100;
+    slider.value = item.fill_percent != null ? item.fill_percent : 100;
+
+    var label = document.createElement('span');
+    label.className = 'fill-label';
+    label.textContent = slider.value + '%';
+
+    slider.addEventListener('input', function () {
+      label.textContent = slider.value + '%';
+    });
+    slider.addEventListener('change', function () {
+      apiFetch('/items/' + item.id, {
+        method: 'PATCH',
+        body: JSON.stringify({ fill_percent: parseFloat(slider.value) }),
+      })
+        .then(refresh)
+        .catch(function (err) { alert(err.message); });
+    });
+
+    track.appendChild(slider);
+    wrap.appendChild(track);
+    wrap.appendChild(label);
+    return wrap;
+  }
+
   function rowClass(item) {
     if (item.status !== 'active') return item.status;
     var d = daysUntil(item.expiration_date);
@@ -127,10 +198,30 @@
         tr.appendChild(td);
       }
 
-      cell('Name', item.name);
+      var nameTd = document.createElement('td');
+      nameTd.setAttribute('data-label', 'Name');
+      nameTd.textContent = item.name;
+      if (item.low_stock) {
+        var badge = document.createElement('span');
+        badge.className = 'low-stock-badge';
+        badge.textContent = 'Low stock';
+        nameTd.appendChild(document.createTextNode(' '));
+        nameTd.appendChild(badge);
+      }
+      tr.appendChild(nameTd);
+
       cell('Category', item.category);
       cell('Location', item.location);
-      cell('Qty', item.quantity + ' ' + (item.unit || ''));
+
+      var qtyTd = document.createElement('td');
+      qtyTd.setAttribute('data-label', 'Qty');
+      if (item.tracking_mode === 'fill_level') {
+        qtyTd.appendChild(buildFillMeter(item));
+      } else {
+        qtyTd.textContent = item.quantity + ' ' + (item.unit || '');
+      }
+      tr.appendChild(qtyTd);
+
       cell('Purchased', item.purchase_date);
       cell('Expires', item.expiration_date);
       cell('Status', item.status);
@@ -183,6 +274,47 @@
           .catch(function (err) { alert(err.message); });
       });
       actionsTd.appendChild(editBtn);
+
+      var editDatesBtn = document.createElement('button');
+      editDatesBtn.textContent = 'Edit dates';
+      editDatesBtn.className = 'small';
+      editDatesBtn.addEventListener('click', function () {
+        var updates = promptDates(item);
+        if (updates === null) return;
+        apiFetch('/items/' + item.id, { method: 'PATCH', body: JSON.stringify(updates) })
+          .then(refresh)
+          .catch(function (err) { alert(err.message); });
+      });
+      actionsTd.appendChild(editDatesBtn);
+
+      var modeBtn = document.createElement('button');
+      modeBtn.className = 'small';
+      if (item.tracking_mode === 'fill_level') {
+        modeBtn.textContent = 'Track by count';
+        modeBtn.addEventListener('click', function () {
+          apiFetch('/items/' + item.id, { method: 'PATCH', body: JSON.stringify({ tracking_mode: 'count' }) })
+            .then(refresh)
+            .catch(function (err) { alert(err.message); });
+        });
+      } else {
+        modeBtn.textContent = 'Track by fill level';
+        modeBtn.addEventListener('click', function () {
+          var input = window.prompt('Roughly how full is "' + item.name + '" right now? (0-100%)', '100');
+          if (input === null) return;
+          var pct = parseFloat(input);
+          if (!(pct >= 0 && pct <= 100)) {
+            alert('Enter a number between 0 and 100.');
+            return;
+          }
+          apiFetch('/items/' + item.id, {
+            method: 'PATCH',
+            body: JSON.stringify({ tracking_mode: 'fill_level', fill_percent: pct }),
+          })
+            .then(refresh)
+            .catch(function (err) { alert(err.message); });
+        });
+      }
+      actionsTd.appendChild(modeBtn);
 
       var buyAgainBtn = document.createElement('button');
       buyAgainBtn.textContent = 'Buy again';

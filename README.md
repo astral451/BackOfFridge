@@ -22,6 +22,24 @@ Everything is an `item`: `name`, `category` (`perishable` / `nonperishable`),
 `thrown_out`), `thrown_out_date`, `notes`. The same table already covers non-perishable
 items — just set `category: "nonperishable"` and leave `expiration_date` blank.
 
+Two more fields support low-stock tracking: `tracking_mode` (`count` — the
+default, uses `quantity` — or `fill_level`, for things like a bin of dog food
+or a milk jug where a discrete count doesn't really apply) and `fill_percent`
+(0-100, set via a slider in the UI when `tracking_mode` is `fill_level`).
+`low_stock_threshold` marks when an item should be flagged as running low —
+interpreted as a quantity for `count` items or a percentage for `fill_level`
+items (fill-level items default to 25% if no threshold is set; count items
+have no default, since a sensible number varies too much by unit to guess).
+
+Every purchase, consume, throw-out, edit, undo, and delete is also recorded
+in `item_events` (item id/name, event type, a JSON detail blob, timestamp) —
+an actual queryable history, distinct from the human-readable log file below
+and from the single-slot undo memory. See `GET /api/items/:id/history`. One
+exception: a PATCH that only changes `purchase_date`/`expiration_date` (the
+"Edit dates" button — for correcting a date mistake, not a consumption
+event) is left out of `item_events` since it isn't a usage pattern worth
+tracking, though it's still written to the plain text log below.
+
 ## Running it
 
 ### Prerequisites
@@ -146,6 +164,7 @@ All routes below require the `x-api-key` header.
 | POST | `/api/items/:id/throw-out` | Throw out some or all of an item. Body `{ quantity? }` — omit to throw out everything remaining, or pass a number to remove just that many (item stays `active` with the reduced quantity) |
 | POST | `/api/items/:id/consume` | Same as above, but marks it `consumed` instead of `thrown_out` |
 | POST | `/api/items/:id/undo` | Reverse the most recent throw-out/consume call on this item (one level of undo) |
+| GET | `/api/items/:id/history` | This item's recorded events (purchased, consumed, thrown_out, edited, fill_level_set, undo, deleted), newest first |
 | DELETE | `/api/items/:id` | Remove an item |
 | GET | `/api/locations` | Managed location names, for the purchase form/filter dropdowns |
 | GET | `/api/locations/detail` | Locations with a count of items currently referencing each, for the manage-locations page |

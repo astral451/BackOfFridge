@@ -62,5 +62,48 @@ function ensureLocation(name) {
   }
 }
 
+// Append-only history of actions taken on items - purchases, consumes,
+// throw-outs, edits, undos, fill-level changes - so trends over time
+// (how often something's rebought, how much gets wasted, etc.) become
+// answerable later. Distinct from the text log file (human-readable lines,
+// not queryable) and from prev_status/prev_quantity (a single-slot memory
+// for one-level undo, overwritten each time, not a history).
+db.exec(`
+  CREATE TABLE IF NOT EXISTS item_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id INTEGER,
+    item_name TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    detail TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_item_events_name ON item_events(item_name);
+  CREATE INDEX IF NOT EXISTS idx_item_events_item_id ON item_events(item_id);
+  CREATE INDEX IF NOT EXISTS idx_item_events_created ON item_events(created_at);
+`);
+
+function recordEvent(itemId, itemName, eventType, detail) {
+  db.prepare(`
+    INSERT INTO item_events (item_id, item_name, event_type, detail)
+    VALUES (?, ?, ?, ?)
+  `).run(itemId, itemName, eventType, detail ? JSON.stringify(detail) : null);
+}
+
+// Migration: low-stock tracking. tracking_mode picks how an item signals
+// low stock - 'count' uses the existing numeric quantity against
+// low_stock_threshold; 'fill_level' uses fill_percent (0-100, set via a
+// slider) against the same threshold column, interpreted as a percentage.
+if (!existingColumns.includes('tracking_mode')) {
+  db.exec("ALTER TABLE items ADD COLUMN tracking_mode TEXT NOT NULL DEFAULT 'count'");
+}
+if (!existingColumns.includes('fill_percent')) {
+  db.exec('ALTER TABLE items ADD COLUMN fill_percent REAL');
+}
+if (!existingColumns.includes('low_stock_threshold')) {
+  db.exec('ALTER TABLE items ADD COLUMN low_stock_threshold REAL');
+}
+
 module.exports = db;
 module.exports.ensureLocation = ensureLocation;
+module.exports.recordEvent = recordEvent;
