@@ -146,9 +146,18 @@ router.patch('/:id', (req, res) => {
   `).run(merged);
   if (updates.location) db.ensureLocation(updates.location);
 
-  const onlyFillPercentChanged = Object.keys(updates).length === 1 && updates.fill_percent !== undefined;
+  const changedFields = Object.keys(updates);
+  const onlyFillPercentChanged = changedFields.length === 1 && updates.fill_percent !== undefined;
+  const dateFields = ['purchase_date', 'expiration_date'];
+  const onlyDatesChanged = changedFields.length > 0 && changedFields.every((f) => dateFields.includes(f));
+
   if (onlyFillPercentChanged) {
     db.recordEvent(existing.id, existing.name, 'fill_level_set', { from: existing.fill_percent, to: updates.fill_percent });
+  } else if (onlyDatesChanged) {
+    // A date correction (e.g. fixing a wrong expiration) isn't a
+    // consumption-pattern signal, so it's deliberately left out of
+    // item_events - just noted in the plain text log.
+    log(`DATES EDITED "${existing.name}": ` + changedFields.map((f) => `${f} ${existing[f] || '(none)'} -> ${updates[f] || '(none)'}`).join(', '));
   } else {
     db.recordEvent(existing.id, existing.name, 'edited', updates);
   }

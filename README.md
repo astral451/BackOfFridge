@@ -34,7 +34,11 @@ have no default, since a sensible number varies too much by unit to guess).
 Every purchase, consume, throw-out, edit, undo, and delete is also recorded
 in `item_events` (item id/name, event type, a JSON detail blob, timestamp) —
 an actual queryable history, distinct from the human-readable log file below
-and from the single-slot undo memory. See `GET /api/items/:id/history`.
+and from the single-slot undo memory. See `GET /api/items/:id/history`. One
+exception: a PATCH that only changes `purchase_date`/`expiration_date` (the
+"Edit dates" button — for correcting a date mistake, not a consumption
+event) is left out of `item_events` since it isn't a usage pattern worth
+tracking, though it's still written to the plain text log below.
 
 ## Running it
 

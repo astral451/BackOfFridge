@@ -104,6 +104,36 @@
     return { location: location, quantity: quantity };
   }
 
+  var DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+  // Returns a partial-update body of just date fields, or null if cancelled.
+  // Kept separate from promptEdits so a pure date correction (fixing a wrong
+  // expiration date) sends a PATCH containing only date fields - the server
+  // uses that to leave it out of consumption-pattern tracking.
+  function promptDates(item) {
+    var purchaseInput = window.prompt(
+      'Purchase date for "' + item.name + '" (YYYY-MM-DD, blank for none):',
+      item.purchase_date || ''
+    );
+    if (purchaseInput === null) return null;
+    if (purchaseInput !== '' && !DATE_PATTERN.test(purchaseInput)) {
+      alert('Enter a date as YYYY-MM-DD, or leave blank.');
+      return null;
+    }
+
+    var expirationInput = window.prompt(
+      'Expiration date for "' + item.name + '" (YYYY-MM-DD, blank for none):',
+      item.expiration_date || ''
+    );
+    if (expirationInput === null) return null;
+    if (expirationInput !== '' && !DATE_PATTERN.test(expirationInput)) {
+      alert('Enter a date as YYYY-MM-DD, or leave blank.');
+      return null;
+    }
+
+    return { purchase_date: purchaseInput || null, expiration_date: expirationInput || null };
+  }
+
   // Builds a vertical fill-level meter: a normal horizontal <input
   // type="range"> rotated with CSS (not the vendor-specific "orient" or
   // "-webkit-appearance: slider-vertical" APIs, which only work in some
@@ -244,6 +274,18 @@
           .catch(function (err) { alert(err.message); });
       });
       actionsTd.appendChild(editBtn);
+
+      var editDatesBtn = document.createElement('button');
+      editDatesBtn.textContent = 'Edit dates';
+      editDatesBtn.className = 'small';
+      editDatesBtn.addEventListener('click', function () {
+        var updates = promptDates(item);
+        if (updates === null) return;
+        apiFetch('/items/' + item.id, { method: 'PATCH', body: JSON.stringify(updates) })
+          .then(refresh)
+          .catch(function (err) { alert(err.message); });
+      });
+      actionsTd.appendChild(editDatesBtn);
 
       var modeBtn = document.createElement('button');
       modeBtn.className = 'small';
