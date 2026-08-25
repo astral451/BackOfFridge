@@ -10,3 +10,17 @@ services:
       DB_PATH: /data/inventory.db
     volumes:
       - ./data:/data
+
+  # Optional: only starts if you're using a Cloudflare Named Tunnel (see
+  # README's "Cloudflare Tunnel" section). Set TUNNEL_TOKEN and
+  # COMPOSE_PROFILES=tunnel in .env to enable it; otherwise `docker compose
+  # up` skips this service entirely - no crash-looping on a missing token.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN}
+    profiles: ["tunnel"]
+    depends_on:
+      - backoffridge

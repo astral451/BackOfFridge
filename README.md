@@ -131,12 +131,67 @@ it at that platform's persistent volume for `DB_PATH` instead of a local bind mo
 ### Reaching it from your phone / Supernote away from home
 
 The container only listens on the port you expose; it doesn't set up remote access.
+
+**If you currently have a router port forwarded straight to this app: stop.**
+A raw port-forward puts your home's public IP directly in front of internet
+scanners with no TLS, fronted by nothing but the app's single shared
+`API_KEY`. It's fine for a quick local test, but not for anything left running
+long-term. Close that port-forward once one of the options below is working.
+
 Options, cheapest first:
 - **Tailscale / a WireGuard tunnel** on the home server — phone joins the same
-  private network, hits it by hostname, no port forwarding.
-- **Cloudflare Tunnel** — free, gives you a public HTTPS URL without opening a port
-  on your router.
-- Traditional port-forward + your own domain/TLS if you want it fully public.
+  private network, hits it by hostname, no port forwarding, no public exposure
+  at all. Best choice if only your own devices need access.
+- **Cloudflare Tunnel** (recommended for letting family members reach it from
+  their own devices) — see the dedicated section below. No open port, free
+  HTTPS, and the outbound connection is initiated by your server, so there's
+  nothing on your router for a scanner to find.
+- Traditional port-forward + your own domain/TLS if you want it fully public —
+  not recommended; the two options above get you the same reachability
+  without exposing the port itself.
+
+### Cloudflare Tunnel
+
+Cloudflare's tunnel, automatic HTTPS, and DNS hosting are genuinely free. A
+**stable, memorable hostname** on top of it (rather than one that changes
+every time you restart) needs a domain you own — cheap (a few dollars a
+year from any registrar), not literally $0. Two paths depending on whether
+you want that now or just want to test tonight:
+
+**Quick Tunnel — free, zero signup, right now, but the URL is ephemeral**
+(changes every time you restart it, so it's for testing, not a bookmark):
+```bash
+docker run --rm -it cloudflare/cloudflared:latest tunnel --url http://host.docker.internal:3000
+```
+(replace `host.docker.internal` with your server's LAN IP if that hostname
+doesn't resolve on your setup). It prints a random `https://something.trycloudflare.com`
+URL — visit it, confirm the app loads over HTTPS from outside your network,
+then stop it. This just proves the tunnel path works before committing to
+the stable setup below.
+
+**Named Tunnel — a stable hostname, needs a domain in your Cloudflare account:**
+1. Get a domain (if you don't have one) from any registrar, then add it to a
+   free Cloudflare account (Websites → Add a site) and switch the domain's
+   nameservers to Cloudflare's, as their dashboard walks you through.
+2. In the Cloudflare dashboard: Zero Trust → Networks → Tunnels → Create a
+   tunnel. Name it (e.g. `backoffridge`), choose Docker as the connector
+   type, and it gives you a `TUNNEL_TOKEN`.
+3. Add that token to your `.env`, along with the profile flag that turns the
+   `cloudflared` service on (it's skipped otherwise, so a plain
+   `docker compose up` doesn't try to run a tunnel with no token):
+   ```
+   TUNNEL_TOKEN=the-token-from-the-dashboard
+   COMPOSE_PROFILES=tunnel
+   ```
+4. Still in the tunnel's setup, add a **Public Hostname**: pick a subdomain
+   (e.g. `pantry.yourdomain.com`), service type `HTTP`, and
+   `backoffridge:3000` as the target (that's the app's Docker Compose
+   service name, reachable by name on the shared Docker network — not
+   `localhost`, since `cloudflared` runs in its own container).
+5. `docker compose up -d --build` — the `cloudflared` service (already in
+   `docker-compose.yml`, only runs if `TUNNEL_TOKEN` is set) connects out to
+   Cloudflare automatically. Visit your chosen hostname from outside your
+   network to confirm it works, then close the router port-forward for good.
 
 ## Logging
 

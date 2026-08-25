@@ -57,21 +57,32 @@
   multi-family idea below). Reuses the same expiration color-coding and
   low-stock badge as the main list, and the existing mobile-stacked layout,
   since it's the same table/CSS pattern.
+- Cloudflare Tunnel documentation + optional `docker-compose.yml` service —
+  the recommended path for reaching the app from outside the home network
+  without a router port-forward (README's "Cloudflare Tunnel" section
+  covers both a free zero-setup Quick Tunnel for testing and a stable
+  Named Tunnel for a permanent hostname). The `cloudflared` service in
+  `docker-compose.yml` only starts if `TUNNEL_TOKEN` + `COMPOSE_PROFILES=tunnel`
+  are set, so a plain `docker compose up` is unaffected otherwise. This
+  doesn't touch the app itself — the per-user login item below is what
+  actually replaces the shared `API_KEY` before this is opened up widely.
 
 ## Roadmap
 
 - **Login for multiple families** — accounts so more than one household can
   use the same deployment without seeing each other's data.
-- **Expose to the outside world, with protections** — currently reachable
-  only inside the home network. Making it reachable from anywhere (so other
-  family members can check the inventory away from home) needs real auth
-  beyond the current single shared `API_KEY` — likely per-person
-  credentials rather than one key everyone shares, plus a remote-access
-  path (Tailscale/Cloudflare Tunnel, as already noted in the README's
-  "Reaching it from your phone" section) rather than a raw port-forward.
-  The "At a Glance" read-only view above is a natural low-risk thing to
-  expose first, or to give non-editing family members, since it has no
-  mutating actions at all.
+- **Per-user login** — replaces the single shared `API_KEY` with real
+  accounts (username + password, session cookie), so family members are
+  told apart. Deliberately scoped down from full multi-family isolation:
+  no `family_id`, no separate households, no invite-code/join flow — one
+  shared inventory, same as today, just with per-person accountability.
+  The concrete motivating case: `item_events` already records every action
+  (see above) but not *who* did it: adding `user_id`/`username` to those
+  records means if one family member already reduced the milk, another
+  checking the history can see that and not duplicate the update.
+  Full multi-family isolation (separate households on one deployment) is
+  shelved below as a distinct, larger, "only if actually needed" item —
+  it isn't required for this.
 - **Location customization** — shipped for a single household (locations are
   now a managed list with add/delete). Once multi-family login exists, this
   list needs to be scoped per family like everything else.
@@ -118,10 +129,20 @@
   status), so this is close to a pure UI addition — reuse the existing
   items-list rendering with a fixed filter instead of the location/status
   dropdowns.
-## Open design question: multi-family data isolation
+- **Full multi-family isolation** (separate households sharing one
+  deployment, each with private data) — shelved, larger, only worth doing
+  if this is ever actually hosted for more than one household. The
+  per-user login item above deliberately does *not* include this: it's
+  one shared inventory with per-person accounts, not per-family
+  isolation. If this is ever picked up, the design work below (data
+  isolation approach + the security decision behind it) still stands and
+  doesn't need to be redone.
 
-Raised when discussing location customization — worth deciding before
-building login, since it shapes the schema and every query:
+## Reference: multi-family data isolation design (if picked up later)
+
+Recorded when this was still expected to ship alongside login — kept here
+since the reasoning stands whenever full multi-family isolation is
+actually built, even though it's currently shelved:
 
 - **Shared DB, tenant column (recommended default):** add a `family_id` to
   `items` (and to a new `locations` table) and scope every query by it.
