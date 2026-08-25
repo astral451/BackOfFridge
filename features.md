@@ -23,6 +23,27 @@
 - Access and purchase logging — every API request logs an ACCESS/ACCESS
   DENIED line, purchases log a friendlier line, both to stdout and a
   persisted log file (see README).
+- Pattern and consumption tracking — every purchase, consume, throw-out,
+  edit, undo, and delete is recorded in a real `item_events` table (item
+  id/name, event type, JSON detail, timestamp), queryable via
+  `GET /api/items/:id/history`. This is the foundation piece the Favorites
+  and Low-stock items below were waiting on. No trends/analytics UI over
+  this yet (e.g. "average days between purchases") — that's still future
+  work, this just makes the data exist and be queryable.
+- Low stock indicator, fill-level meter — items can be tracked by `count`
+  (the existing numeric quantity, still the default) or `fill_level` (a
+  vertical slider, 0-100%, for bin/bulk items or anything easier to eyeball
+  than count — a milk jug, a dog food bin). A "Track by fill level" /
+  "Track by count" button per item switches modes; a "Low stock" badge
+  shows once an item drops to/below its threshold (fill-level items default
+  to 25% if no threshold is set; count items need an explicit
+  `low_stock_threshold` — there's no sensible universal default across
+  different units). The vertical slider is a plain horizontal `<input
+  type="range">` rotated with a CSS transform rather than a
+  browser-specific vertical-slider API, so it isn't dependent on any one
+  browser's implementation — still worth a real check on the Supernote's
+  browser, since that's the device that already surfaced one rendering
+  issue with a different control (the old location datalist).
 
 ## Roadmap
 
@@ -33,22 +54,6 @@
   list needs to be scoped per family like everything else.
 - **Barcode/visual scanning** — scan a barcode or product photo to quickly
   re-up an item instead of retyping it (builds on "Buy again").
-- **Pattern and consumption tracking** — record every action (purchase,
-  consume, throw-out, edit, undo) with a timestamp, so trends over time
-  become answerable: how often something's rebought, how much of it
-  typically gets thrown out vs. used, which days it tends to get consumed,
-  etc.
-
-  This needs a real, structured, append-only event history — something the
-  app doesn't have today. What exists now is two things, neither of which
-  is this: the text log file (README's "Logging" section) is human-readable
-  lines in a file, not a queryable table; and `prev_status`/`prev_quantity`
-  on `items` is a single-slot memory for one-level undo, overwritten on the
-  next action, not a history. A proper `item_events` table (item id + name,
-  event type, quantity delta, from/to status, timestamp) would be the
-  foundation piece — and directly feeds two other roadmap items above: the
-  favorites purchase-count and the low-stock estimated-depletion-date option
-  both need exactly this kind of history to compute from.
 - **Live search** — a text box that filters the item list as you type, no
   submit button. The app already loads the full active item list into the
   page for the status/location filters, so this is likely a client-side
@@ -58,9 +63,9 @@
   stops being practical. Matching field: item name at minimum; possibly
   notes too, since location already has its own dedicated filter.
 - **Favorites filter** — surface the most-purchased items for quick re-up.
-  Needs a purchase-count aggregate by item name (current schema tracks each
-  purchase as its own row, with no rollup by name yet — counting is a
-  `GROUP BY name` query, cheap to add).
+  Now unblocked: `item_events` (shipped above) has a `purchased` event per
+  purchase, so this is a `GROUP BY item_name` count over that table filtered
+  to `event_type = 'purchased'`, rather than needing new tracking.
 - **Quick +/- for single-serve items** — a faster path than the current
   prompt for the common case of "used one." Direction: tapping Consume
   normally decrements by 1 immediately (no prompt), and a long-press opens
@@ -90,37 +95,6 @@
   status), so this is close to a pure UI addition — reuse the existing
   items-list rendering with a fixed filter instead of the location/status
   dropdowns.
-- **Low stock indicator** — flag an item as running low, so it shows up
-  without having to notice the quantity yourself. Straightforward for
-  countable items (e.g. paper towels: alert once quantity drops to/below a
-  threshold), harder for bulk/bin items (a giant bag of dog food) where
-  quantity was never a meaningful discrete count to begin with.
-
-  **Direction chosen: a visual fill-level meter**, not a numeric threshold.
-  A vertical slider/meter per item — drag it to roughly where the item is
-  (half full, a quarter left) — used for both the genuinely bulk case (the
-  dog food bin) and any item where eyeballing fullness is just easier than
-  counting units (a gallon of milk). Low-stock is then "fill level below
-  some threshold, e.g. 25%" rather than a unit count at all.
-
-  Implementation notes, not yet built:
-  - This is a different tracking mode from the existing numeric `quantity`
-    field, so items likely need a per-item choice of tracking mode — e.g.
-    `tracking_mode: 'count' | 'fill_level'` plus a `fill_percent` (0-100)
-    field — rather than replacing quantity outright, since plenty of items
-    (a 12-pack) are still better tracked as a count.
-  - Threshold for "running low" at the fill-level: still open — probably a
-    sensible global default (e.g. ≤25%) with a per-item override, since
-    "low" means something different for a bin you refill occasionally vs.
-    a jug you finish in a week.
-  - Interaction risk worth testing early: a true vertical range/slider
-    control has inconsistent cross-browser support (native `<input
-    type="range">` only orients vertically in some browsers; others need
-    CSS rotation tricks), and this app has already hit one instance of a
-    control not rendering usably on the Supernote's browser (the location
-    datalist). Worth a quick real-device check on Supernote before
-    committing to a specific slider implementation.
-
 ## Open design question: multi-family data isolation
 
 Raised when discussing location customization — worth deciding before

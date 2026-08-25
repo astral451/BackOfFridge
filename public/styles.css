@@ -67,6 +67,45 @@ button.small {
   margin-right: 0.25rem;
 }
 
+.low-stock-badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: bold;
+  color: #a15c00;
+  background: #ffe4b3;
+  border-radius: 3px;
+  padding: 0.05rem 0.4rem;
+}
+
+/* A plain horizontal range input, rotated with CSS to read as vertical.
+   Avoids browser-specific vertical-slider APIs (Firefox's orient="vertical",
+   WebKit's -webkit-appearance: slider-vertical) so dragging keeps working
+   anywhere basic CSS transforms do. */
+.fill-meter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+.fill-meter-track {
+  position: relative;
+  width: 32px;
+  height: 90px;
+}
+.fill-meter input[type="range"] {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 80px;
+  height: 24px;
+  margin: 0;
+  transform: translate(-50%, -50%) rotate(-90deg);
+}
+.fill-meter .fill-label {
+  font-size: 0.8rem;
+  color: #555;
+}
+
 @media (max-width: 600px) {
   table, thead, tbody, th, td, tr { display: block; }
   thead { display: none; }
