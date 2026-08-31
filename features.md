@@ -83,6 +83,9 @@
 
 ## Roadmap
 
+Difficulty grades below (Low/Medium/High) are rough cost/complexity, not
+priority — a Low item isn't necessarily more worth doing than a High one.
+
 - **Location customization** — shipped for a single household (locations are
   now a managed list with add/delete). If full multi-family isolation is
   ever built (see the shelved item below), this list would need to be
@@ -90,6 +93,76 @@
   shared inventory this app has today.
 - **Barcode/visual scanning** — scan a barcode or product photo to quickly
   re-up an item instead of retyping it (builds on "Buy again").
+- **Photo capture + recall** — attach a photo to an item; a photo of a new
+  package of something already tracked re-triggers a "Buy again"-style
+  purchase. Two genuinely different versions here, not one feature:
+  - *Manual (Low/Medium):* store a photo per item (new `item_photos` table
+    or a `photo_path` column; files under the existing bind-mounted `/data`
+    directory alongside `inventory.db`, served the same way `public/` is).
+    "Recall" means browsing a small photo gallery and tapping the match —
+    reuses the existing `fillFormFromItem` pre-fill in `public/app.js`
+    once picked, just a visual way to find the item instead of the text
+    list. Needs one new small dependency (`multer`, for the upload) and a
+    mobile file input with `capture="environment"` to open the camera
+    directly.
+  - *Automatic, photo → recognized as the same product (High):* needs real
+    image matching, not just storage — plain photo-similarity is
+    unreliable for near-identical product photos, so a realistic version
+    means an external vision API call per photo (cost, latency, a new
+    external dependency, and photos leaving the server to a third party).
+    Barcode scanning above solves the same underlying goal (auto-identify
+    a product) far more cheaply and reliably — a barcode maps
+    deterministically to a product via a free lookup like Open Food Facts,
+    no ML involved — worth doing that first if automatic recognition is
+    the actual goal rather than building photo recognition from scratch.
+- **Dictation for adding items** — worth naming up front: every iOS/Android
+  keyboard already has a built-in dictation mic button on any text field,
+  so "dictation" doesn't need the app to build speech recognition at all
+  if there's a freeform box to dictate into. That reframes the cost:
+  - *Freeform quick-add box + simple parsing (Low):* one text input
+    ("milk, 1 gallon, fridge"), split on commas/keywords into
+    name/quantity/unit/location, `POST /api/items` same as today.
+    Dictation itself is free via the OS keyboard; the only real work is
+    the parser, and a naive one is simple but fragile on odd phrasing.
+  - *Same, parsed by an LLM call instead of regex (Medium):* far more
+    robust against natural phrasing, at the cost of a new external
+    dependency, an API key to manage, and a small per-call cost.
+  - *In-browser live speech-to-text via the Web Speech API (Medium-High):*
+    real cross-browser risk — decent in Chrome/Android, inconsistent to
+    absent in Safari/iOS and Firefox. This app has already hit
+    browser-compatibility surprises twice on exactly this kind of
+    not-universally-supported API (the location `<datalist>`, the
+    vertical fill-level slider) — same risk class here, worth testing on
+    the Supernote specifically before investing in it.
+  - "Via the Notes app or some other external mechanism" is really the
+    same idea as the AI agent item below (something external writing to
+    the API on your behalf), not a fourth distinct approach.
+- **AI agent with direct DB/API access** — similar goal to dictation above,
+  but by letting an agent (e.g. Claude) call the API on your behalf instead
+  of the app doing speech-to-text itself. This is the gap already flagged
+  in the README's API section made concrete: the API requires a real
+  browser session cookie today (per-user login, shipped) — there's no
+  credential suited to an external automated client yet.
+  - *Personal access token, separate from browser sessions (Medium):* a
+    long-lived, per-user, revocable token checked via an `Authorization:
+    Bearer` header alongside the existing cookie-based session middleware
+    in `server/src/index.js`. Worth scoping it to item-mutating endpoints
+    only, not account management.
+  - *A skill/connector wrapping the existing endpoints (Medium, depends on
+    the token above):* mostly a manifest/tool-definition layer over
+    endpoints that already exist (`POST /api/items`, `/consume`,
+    `/throw-out`, etc.), not new backend logic. Notably this reuses
+    Claude's own language understanding instead of writing a custom
+    parser — once the token exists, this may cost *less* than the
+    LLM-parsing dictation option above, since it offloads the
+    natural-language part to an agent that already exists.
+  - *End-to-end, including a stable public URL (High overall):* an
+    external agent can't reliably call a URL that changes every restart,
+    so this also depends on the Cloudflare Named Tunnel work already in
+    progress (the `eu.org` domain application) rather than the ephemeral
+    Quick Tunnel. Graded High as a whole not because any one piece is
+    novel, but because it touches auth again, needs a stable public
+    endpoint, and needs an external integration layer all together.
 - **Live search** — a text box that filters the item list as you type, no
   submit button. The app already loads the full active item list into the
   page for the status/location filters, so this is likely a client-side
