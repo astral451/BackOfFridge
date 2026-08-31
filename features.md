@@ -91,58 +91,76 @@ priority — a Low item isn't necessarily more worth doing than a High one.
   ever built (see the shelved item below), this list would need to be
   scoped per family like everything else — not needed for the single
   shared inventory this app has today.
+- **Location editing: dropdown + case-insensitive** — two distinct pieces:
+  - *Case-insensitive matching (Low), worth doing regardless of the
+    dropdown question below.* Right now typing "Fridge" via "+ Add new
+    location" when "fridge" already exists creates a second, separate
+    managed location (`db.ensureLocation` in `server/src/db.js` does an
+    exact-match `INSERT OR IGNORE`). Normalizing on lookup/insert is a
+    small, contained fix in one place that prevents accidental duplicates
+    everywhere locations get created (purchase form, "Manage locations,"
+    and the Edit flow below), not just in one of them.
+  - *A real dropdown in the Edit flow (Medium, not Low).* The purchase
+    form's location field is already a proper `<select>` (built earlier
+    specifically to fix this same mistyping problem there), but the Edit
+    button's `promptEdits` (`public/app.js`) still uses a sequential
+    `window.prompt()` for location — and `window.prompt()` is plain text
+    only, it can't render a dropdown. Getting a real dropdown into Edit
+    means moving that one field off the prompt-sequence pattern into a
+    small inline picker — a real UI change, not a one-line swap, despite
+    sounding like a small ask.
+- **Item categorization (Low/Medium)** — a managed list of categories
+  (dairy, produce, cleaning supplies, etc.), distinct from the existing
+  `category` field (which is a fixed `perishable`/`nonperishable` enum
+  that drives no other logic — repurposing it would break that meaning,
+  so this needs its own field, e.g. `tags`). Once named distinctly, this
+  is close to a repeat of the already-shipped **Locations** pattern
+  (`server/src/db.js`'s `locations` table, `server/src/routes/meta.js`'s
+  `/locations` CRUD routes, `public/locations.html`: a managed list,
+  add/delete, dropdown in the purchase form, filter in the item list) —
+  mostly copying that shape for a new field rather than inventing one.
 - **Barcode/visual scanning** — scan a barcode or product photo to quickly
   re-up an item instead of retyping it (builds on "Buy again").
-- **Photo capture + recall** — attach a photo to an item; a photo of a new
-  package of something already tracked re-triggers a "Buy again"-style
-  purchase. Two genuinely different versions here, not one feature:
-  - *Manual (Low/Medium):* store a photo per item (new `item_photos` table
-    or a `photo_path` column; files under the existing bind-mounted `/data`
-    directory alongside `inventory.db`, served the same way `public/` is).
-    "Recall" means browsing a small photo gallery and tapping the match —
-    reuses the existing `fillFormFromItem` pre-fill in `public/app.js`
-    once picked, just a visual way to find the item instead of the text
-    list. Needs one new small dependency (`multer`, for the upload) and a
-    mobile file input with `capture="environment"` to open the camera
-    directly.
-  - *Automatic, photo → recognized as the same product (High):* needs real
-    image matching, not just storage — plain photo-similarity is
-    unreliable for near-identical product photos, so a realistic version
-    means an external vision API call per photo (cost, latency, a new
-    external dependency, and photos leaving the server to a third party).
-    Barcode scanning above solves the same underlying goal (auto-identify
-    a product) far more cheaply and reliably — a barcode maps
-    deterministically to a product via a free lookup like Open Food Facts,
-    no ML involved — worth doing that first if automatic recognition is
-    the actual goal rather than building photo recognition from scratch.
-- **Dictation for adding items** — worth naming up front: every iOS/Android
-  keyboard already has a built-in dictation mic button on any text field,
-  so "dictation" doesn't need the app to build speech recognition at all
-  if there's a freeform box to dictate into. That reframes the cost:
-  - *Freeform quick-add box + simple parsing (Low):* one text input
-    ("milk, 1 gallon, fridge"), split on commas/keywords into
-    name/quantity/unit/location, `POST /api/items` same as today.
-    Dictation itself is free via the OS keyboard; the only real work is
-    the parser, and a naive one is simple but fragile on odd phrasing.
-  - *Same, parsed by an LLM call instead of regex (Medium):* far more
-    robust against natural phrasing, at the cost of a new external
-    dependency, an API key to manage, and a small per-call cost.
-  - *In-browser live speech-to-text via the Web Speech API (Medium-High):*
-    real cross-browser risk — decent in Chrome/Android, inconsistent to
-    absent in Safari/iOS and Firefox. This app has already hit
-    browser-compatibility surprises twice on exactly this kind of
-    not-universally-supported API (the location `<datalist>`, the
-    vertical fill-level slider) — same risk class here, worth testing on
-    the Supernote specifically before investing in it.
-  - "Via the Notes app or some other external mechanism" is really the
-    same idea as the AI agent item below (something external writing to
-    the API on your behalf), not a fourth distinct approach.
-- **AI agent with direct DB/API access** — similar goal to dictation above,
-  but by letting an agent (e.g. Claude) call the API on your behalf instead
-  of the app doing speech-to-text itself. This is the gap already flagged
-  in the README's API section made concrete: the API requires a real
-  browser session cookie today (per-user login, shipped) — there's no
-  credential suited to an external automated client yet.
+- **Photo capture + recall (Low/Medium)** — **decided: manual only, no
+  recognition, at least for now.** Store a photo per item (new
+  `item_photos` table or a `photo_path` column; files under the existing
+  bind-mounted `/data` directory alongside `inventory.db`, served the same
+  way `public/` is). "Recall" means browsing a small photo gallery and
+  tapping the match — reuses the existing `fillFormFromItem` pre-fill in
+  `public/app.js` once picked, just a visual way to find the item instead
+  of the text list. Needs one new small dependency (`multer`, for the
+  upload) and a mobile file input with `capture="environment"` to open the
+  camera directly. (An automatic "photo → recognized as the same product"
+  version was considered and explicitly not pursued — it would need real
+  image matching, likely an external vision API call per photo, and
+  barcode scanning above already covers the same "auto-identify a
+  product" goal far more cheaply and reliably if that's ever wanted.)
+- **Dictation for adding items (Low) — decided direction.** Every
+  iOS/Android keyboard already has a built-in dictation mic button on any
+  text field, so this doesn't need the app to build speech recognition at
+  all: a freeform "quick add" text box ("milk, 1 gallon, fridge"), split on
+  commas/keywords into name/quantity/unit/location, **pre-fills the
+  existing add-item form for the user to review and adjust before
+  saving** — it doesn't submit directly from the parsed text. Dictation
+  itself is free via the OS keyboard; the only real work is the parser,
+  and a naive one is simple but fragile on odd phrasing. Two alternatives
+  considered and not chosen: parsing via an LLM call instead of regex
+  (Medium — more robust, but a new external dependency/API key/per-call
+  cost) and in-browser live speech-to-text via the Web Speech API
+  (Medium-High — real cross-browser risk, decent in Chrome/Android but
+  inconsistent-to-absent in Safari/iOS and Firefox; this app has already
+  hit browser-compatibility surprises twice on exactly this kind of
+  not-universally-supported API — the location `<datalist>`, the vertical
+  fill-level slider — same risk class here).
+- **AI agent with direct DB/API access — on hold, "not worth it yet."**
+  Similar goal to dictation above, but by letting an agent (e.g. Claude)
+  call the API on your behalf instead of the app doing speech-to-text
+  itself — and the preferred direction if this is picked up later is
+  exactly this "use an existing agent" approach below, not a bespoke
+  in-app AI feature. This is the gap already flagged in the README's API
+  section made concrete: the API requires a real browser session cookie
+  today (per-user login, shipped) — there's no credential suited to an
+  external automated client yet.
   - *Personal access token, separate from browser sessions (Medium):* a
     long-lived, per-user, revocable token checked via an `Authorization:
     Bearer` header alongside the existing cookie-based session middleware
@@ -163,14 +181,24 @@ priority — a Low item isn't necessarily more worth doing than a High one.
     Quick Tunnel. Graded High as a whole not because any one piece is
     novel, but because it touches auth again, needs a stable public
     endpoint, and needs an external integration layer all together.
-- **Live search** — a text box that filters the item list as you type, no
-  submit button. The app already loads the full active item list into the
-  page for the status/location filters, so this is likely a client-side
-  filter over that in-memory list (instant, no network round trip, no
-  debounce needed) rather than a new server endpoint — worth revisiting
-  only if the item list gets large enough that loading everything upfront
-  stops being practical. Matching field: item name at minimum; possibly
-  notes too, since location already has its own dedicated filter.
+- **Live search, on all fields (Low)** — a text box that filters the item
+  list as you type, no submit button, matching across every field (name,
+  location, category, notes, unit, status), not just name. The app already
+  loads the full active item list into the page for the status/location
+  filters, so this is a client-side filter over that in-memory list
+  (instant, no network round trip, no debounce needed) rather than a new
+  server endpoint — widening the fields checked per keystroke doesn't
+  change that approach. Worth revisiting only if the item list gets large
+  enough that loading everything upfront stops being practical.
+- **Sorting: recently-added / name (Low)** — a small control (Default /
+  Recently added / Name) to re-sort the item list; the current
+  expiration-first ordering stays the default. `GET /api/items`
+  (`server/src/routes/items.js`) already orders by
+  `expiration_date IS NULL, expiration_date ASC, created_at DESC`, and
+  both new sort keys (`created_at`, `name`) already exist as columns —
+  simplest approach, consistent with live search above, is sorting the
+  same in-memory array client-side in `renderItems`
+  (`public/app.js`) rather than a server-side `sort=` param.
 - **Favorites filter** — surface the most-purchased items for quick re-up.
   Now unblocked: `item_events` (shipped above) has a `purchased` event per
   purchase, so this is a `GROUP BY item_name` count over that table filtered
