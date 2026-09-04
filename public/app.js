@@ -82,6 +82,43 @@
     document.getElementById('f-expiration').focus();
   }
 
+  // Dictation quirks to normalize before parsing: iOS/Android speech-to-text
+  // (and plenty of people typing manually) write quantities as words rather
+  // than digits, and spell units out in full rather than abbreviating them.
+  var NUMBER_WORDS = {
+    zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7,
+    eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13,
+    fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18,
+    nineteen: 19, twenty: 20, half: 0.5, quarter: 0.25, dozen: 12,
+  };
+  var UNIT_WORDS = {
+    ounce: 'oz', ounces: 'oz',
+    pound: 'lb', pounds: 'lb', lbs: 'lb',
+    gallon: 'gal', gallons: 'gal',
+    quart: 'qt', quarts: 'qt',
+    pint: 'pt', pints: 'pt',
+    liter: 'L', liters: 'L', litre: 'L', litres: 'L',
+    milliliter: 'mL', milliliters: 'mL',
+    gram: 'g', grams: 'g',
+    kilogram: 'kg', kilograms: 'kg',
+  };
+
+  // Replaces a leading number word ("two" -> "2") and normalizes a trailing
+  // unit word ("ounces" -> "oz") so the existing digit+unit regex below
+  // still does the actual splitting - this only rewrites the words it knows
+  // about and leaves anything else untouched.
+  function normalizeQuickAddSegment(seg) {
+    var words = seg.trim().split(/\s+/);
+    if (words.length && NUMBER_WORDS.hasOwnProperty(words[0].toLowerCase())) {
+      words[0] = String(NUMBER_WORDS[words[0].toLowerCase()]);
+    }
+    var lastWord = words[words.length - 1].toLowerCase();
+    if (UNIT_WORDS.hasOwnProperty(lastWord)) {
+      words[words.length - 1] = UNIT_WORDS[lastWord];
+    }
+    return words.join(' ');
+  }
+
   // Naive heuristic parser for the quick-add box. Dictation itself needs no
   // app code - the phone keyboard's mic button dictates into any text field;
   // this just turns the resulting freeform line into a best-guess set of
@@ -101,7 +138,7 @@
 
     var leftover = [];
     for (var i = 1; i < segments.length; i++) {
-      var seg = segments[i];
+      var seg = normalizeQuickAddSegment(segments[i]);
       var qtyMatch = seg.match(/^(\d+(?:\.\d+)?)\s*(.*)$/);
       var matchedLocation = locations.filter(function (loc) { return loc.toLowerCase() === seg.toLowerCase(); })[0];
       var matchedTag = tags.filter(function (t) { return t.toLowerCase() === seg.toLowerCase(); })[0];
@@ -596,6 +633,7 @@
       document.getElementById('f-category').value = 'perishable';
       document.getElementById('f-location-new').classList.add('hidden');
       document.getElementById('f-tag-new').classList.add('hidden');
+      setDefaultPurchaseDate();
       refresh();
     }).catch(function (err) {
       alert(err.message);
@@ -618,6 +656,14 @@
   document.getElementById('searchBox').addEventListener('input', applyFiltersAndRender);
   document.getElementById('sortBy').addEventListener('change', applyFiltersAndRender);
 
+  // Defaults the purchase date to today, since that's true for the large
+  // majority of purchases logged - saves a tap/dictation on every add, and
+  // is still trivially overridable for a backdated entry.
+  function setDefaultPurchaseDate() {
+    document.getElementById('f-purchase').value = new Date().toISOString().slice(0, 10);
+  }
+
+  setDefaultPurchaseDate();
   loadWhoAmI();
   refresh();
 })();
