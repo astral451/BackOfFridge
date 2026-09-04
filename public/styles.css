@@ -72,6 +72,43 @@ button.small {
   margin-right: 0.25rem;
 }
 
+.qty-adjust {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.qty-adjust button {
+  padding: 0.1rem 0.5rem;
+  font-size: 0.9rem;
+  line-height: 1.2;
+}
+
+/* Full-field edit: a vertical, one-row-per-field grid replacing the item
+   row's cells entirely (a single colspan'd <td>) rather than cramming
+   every field into the narrow actions cell. */
+.full-edit-cell {
+  background: #fbfbfb;
+}
+.full-edit-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.5rem 0.75rem;
+  align-items: center;
+  max-width: 480px;
+}
+.full-edit-grid label {
+  font-weight: bold;
+  font-size: 0.85rem;
+}
+.full-edit-grid input,
+.full-edit-grid select {
+  padding: 0.3rem;
+  width: 100%;
+}
+.full-edit-buttons {
+  margin-top: 0.75rem;
+}
+
 .low-stock-badge {
   display: inline-block;
   font-size: 0.75rem;

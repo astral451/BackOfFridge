@@ -179,39 +179,137 @@
     document.getElementById('f-name').focus();
   }
 
-  // Replaces the actions cell with an inline location <select> (a real
-  // dropdown, unlike window.prompt() which is plain text only and can't
-  // render one) plus a quantity input and Save/Cancel. Cancel just calls
-  // refresh() to redraw the row normally rather than trying to restore the
-  // original buttons by hand.
-  function startInlineLocationEdit(item, actionsTd) {
-    actionsTd.innerHTML = '';
+  // Replaces the whole row with a single wide cell holding a vertical,
+  // one-row-per-field grid covering every editable field - name, category,
+  // location, tag, quantity/unit (or fill %), purchase/expiration dates,
+  // and notes - reusing the same <select>s built for the purchase form
+  // rather than inventing new controls. Folds in what used to be the
+  // separate "Edit dates" prompt sequence, since dates are just two more
+  // rows here. Cancel/refresh discards unsaved changes and redraws the row
+  // normally, same pattern as the location-only editor this replaces.
+  function startFullFieldEdit(item, tr) {
+    var colCount = tr.children.length;
+    tr.innerHTML = '';
 
-    var select = document.createElement('select');
-    select.disabled = true;
-    var loadingOpt = document.createElement('option');
-    loadingOpt.textContent = 'Loading locations...';
-    select.appendChild(loadingOpt);
+    var td = document.createElement('td');
+    td.colSpan = colCount;
+    td.className = 'full-edit-cell';
 
-    var qtyInput = document.createElement('input');
-    qtyInput.type = 'number';
-    qtyInput.step = 'any';
-    qtyInput.value = item.quantity;
-    qtyInput.className = 'inline-edit-qty';
+    var grid = document.createElement('div');
+    grid.className = 'full-edit-grid';
+
+    function row(labelText, inputEl) {
+      var label = document.createElement('label');
+      label.textContent = labelText;
+      grid.appendChild(label);
+      grid.appendChild(inputEl);
+    }
+
+    var nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.value = item.name;
+    row('Name', nameInput);
+
+    var categorySelect = document.createElement('select');
+    [['perishable', 'Perishable'], ['nonperishable', 'Non-perishable']].forEach(function (pair) {
+      var opt = document.createElement('option');
+      opt.value = pair[0];
+      opt.textContent = pair[1];
+      categorySelect.appendChild(opt);
+    });
+    categorySelect.value = item.category;
+    row('Category', categorySelect);
+
+    var locationSelect = document.createElement('select');
+    locationSelect.disabled = true;
+    var loadingLocOpt = document.createElement('option');
+    loadingLocOpt.textContent = 'Loading...';
+    locationSelect.appendChild(loadingLocOpt);
+    row('Location', locationSelect);
+
+    var tagSelect = document.createElement('select');
+    tagSelect.disabled = true;
+    var loadingTagOpt = document.createElement('option');
+    loadingTagOpt.textContent = 'Loading...';
+    tagSelect.appendChild(loadingTagOpt);
+    row('Tag', tagSelect);
+
+    var quantityInput, unitInput, fillInput;
+    if (item.tracking_mode === 'fill_level') {
+      fillInput = document.createElement('input');
+      fillInput.type = 'number';
+      fillInput.min = 0;
+      fillInput.max = 100;
+      fillInput.value = item.fill_percent != null ? item.fill_percent : 100;
+      row('Fill %', fillInput);
+    } else {
+      quantityInput = document.createElement('input');
+      quantityInput.type = 'number';
+      quantityInput.step = 'any';
+      quantityInput.value = item.quantity;
+      row('Quantity', quantityInput);
+
+      unitInput = document.createElement('input');
+      unitInput.type = 'text';
+      unitInput.value = item.unit || '';
+      row('Unit', unitInput);
+    }
+
+    var purchaseInput = document.createElement('input');
+    purchaseInput.type = 'date';
+    purchaseInput.value = item.purchase_date || '';
+    row('Purchased', purchaseInput);
+
+    var expirationInput = document.createElement('input');
+    expirationInput.type = 'date';
+    expirationInput.value = item.expiration_date || '';
+    row('Expires', expirationInput);
+
+    var notesInput = document.createElement('input');
+    notesInput.type = 'text';
+    notesInput.value = item.notes || '';
+    row('Notes', notesInput);
+
+    td.appendChild(grid);
+
+    var buttons = document.createElement('div');
+    buttons.className = 'full-edit-buttons';
 
     var saveBtn = document.createElement('button');
     saveBtn.textContent = 'Save';
     saveBtn.className = 'small';
     saveBtn.addEventListener('click', function () {
-      var quantity = parseFloat(qtyInput.value);
-      if (!(quantity >= 0)) {
-        alert('Enter a number of zero or more.');
+      var name = nameInput.value.trim();
+      if (!name) {
+        alert('Name is required.');
         return;
       }
-      apiFetch('/items/' + item.id, {
-        method: 'PATCH',
-        body: JSON.stringify({ location: select.value, quantity: quantity }),
-      })
+      var updates = {
+        name: name,
+        category: categorySelect.value,
+        location: locationSelect.value,
+        tag: tagSelect.value,
+        purchase_date: purchaseInput.value || null,
+        expiration_date: expirationInput.value || null,
+        notes: notesInput.value,
+      };
+      if (item.tracking_mode === 'fill_level') {
+        var pct = parseFloat(fillInput.value);
+        if (!(pct >= 0 && pct <= 100)) {
+          alert('Fill % must be between 0 and 100.');
+          return;
+        }
+        updates.fill_percent = pct;
+      } else {
+        var quantity = parseFloat(quantityInput.value);
+        if (!(quantity >= 0)) {
+          alert('Enter a quantity of zero or more.');
+          return;
+        }
+        updates.quantity = quantity;
+        updates.unit = unitInput.value;
+      }
+      apiFetch('/items/' + item.id, { method: 'PATCH', body: JSON.stringify(updates) })
         .then(refresh)
         .catch(function (err) { alert(err.message); });
     });
@@ -221,52 +319,35 @@
     cancelBtn.className = 'small';
     cancelBtn.addEventListener('click', refresh);
 
-    actionsTd.appendChild(select);
-    actionsTd.appendChild(qtyInput);
-    actionsTd.appendChild(saveBtn);
-    actionsTd.appendChild(cancelBtn);
+    buttons.appendChild(saveBtn);
+    buttons.appendChild(cancelBtn);
+    td.appendChild(buttons);
+    tr.appendChild(td);
 
-    apiFetch('/locations').then(function (locations) {
-      select.innerHTML = '';
+    Promise.all([apiFetch('/locations'), apiFetch('/tags')]).then(function (results) {
+      var locations = results[0];
+      var tags = results[1];
+
+      locationSelect.innerHTML = '';
       locations.forEach(function (loc) {
         var opt = document.createElement('option');
         opt.value = loc;
         opt.textContent = loc;
-        select.appendChild(opt);
+        locationSelect.appendChild(opt);
       });
-      select.value = item.location;
-      select.disabled = false;
+      locationSelect.value = item.location;
+      locationSelect.disabled = false;
+
+      tagSelect.innerHTML = '<option value="">(none)</option>';
+      tags.forEach(function (tag) {
+        var opt = document.createElement('option');
+        opt.value = tag;
+        opt.textContent = tag;
+        tagSelect.appendChild(opt);
+      });
+      tagSelect.value = item.tag || '';
+      tagSelect.disabled = false;
     }).catch(function (err) { alert(err.message); });
-  }
-
-  var DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-
-  // Returns a partial-update body of just date fields, or null if cancelled.
-  // Kept separate from promptEdits so a pure date correction (fixing a wrong
-  // expiration date) sends a PATCH containing only date fields - the server
-  // uses that to leave it out of consumption-pattern tracking.
-  function promptDates(item) {
-    var purchaseInput = window.prompt(
-      'Purchase date for "' + item.name + '" (YYYY-MM-DD, blank for none):',
-      item.purchase_date || ''
-    );
-    if (purchaseInput === null) return null;
-    if (purchaseInput !== '' && !DATE_PATTERN.test(purchaseInput)) {
-      alert('Enter a date as YYYY-MM-DD, or leave blank.');
-      return null;
-    }
-
-    var expirationInput = window.prompt(
-      'Expiration date for "' + item.name + '" (YYYY-MM-DD, blank for none):',
-      item.expiration_date || ''
-    );
-    if (expirationInput === null) return null;
-    if (expirationInput !== '' && !DATE_PATTERN.test(expirationInput)) {
-      alert('Enter a date as YYYY-MM-DD, or leave blank.');
-      return null;
-    }
-
-    return { purchase_date: purchaseInput || null, expiration_date: expirationInput || null };
   }
 
   // Builds a vertical fill-level meter: a normal horizontal <input
@@ -307,6 +388,65 @@
     track.appendChild(slider);
     wrap.appendChild(track);
     wrap.appendChild(label);
+    return wrap;
+  }
+
+  // Quick +/- for the common "used/added one" case, with no prompt. Count-
+  // tracked items step by 1 (consume for -, a plain quantity PATCH for +);
+  // fill-level items step by 10 percentage points, and a - at or below 10%
+  // fully consumes the item instead of going negative - mirroring how
+  // reduceQuantity (server-side) floors a count-based consume at zero.
+  function quickAdjust(item, delta) {
+    if (item.tracking_mode === 'fill_level') {
+      var current = item.fill_percent != null ? item.fill_percent : 100;
+      if (delta < 0 && current <= 10) {
+        apiFetch('/items/' + item.id + '/consume', { method: 'POST', body: JSON.stringify({}) })
+          .then(refresh)
+          .catch(function (err) { alert(err.message); });
+        return;
+      }
+      var newPct = Math.max(0, Math.min(100, current + delta * 10));
+      apiFetch('/items/' + item.id, { method: 'PATCH', body: JSON.stringify({ fill_percent: newPct }) })
+        .then(refresh)
+        .catch(function (err) { alert(err.message); });
+    } else if (delta < 0) {
+      apiFetch('/items/' + item.id + '/consume', {
+        method: 'POST',
+        body: JSON.stringify({ quantity: Math.min(1, item.quantity) }),
+      })
+        .then(refresh)
+        .catch(function (err) { alert(err.message); });
+    } else {
+      apiFetch('/items/' + item.id, {
+        method: 'PATCH',
+        body: JSON.stringify({ quantity: item.quantity + 1 }),
+      })
+        .then(refresh)
+        .catch(function (err) { alert(err.message); });
+    }
+  }
+
+  // Builds the -/+ button pair for the Qty cell (see quickAdjust above).
+  function buildQtyAdjustButtons(item) {
+    var wrap = document.createElement('div');
+    wrap.className = 'qty-adjust';
+
+    var minusBtn = document.createElement('button');
+    minusBtn.type = 'button';
+    minusBtn.textContent = '−';
+    minusBtn.className = 'small';
+    minusBtn.title = item.tracking_mode === 'fill_level' ? '-10%' : '-1';
+    minusBtn.addEventListener('click', function () { quickAdjust(item, -1); });
+
+    var plusBtn = document.createElement('button');
+    plusBtn.type = 'button';
+    plusBtn.textContent = '+';
+    plusBtn.className = 'small';
+    plusBtn.title = item.tracking_mode === 'fill_level' ? '+10%' : '+1';
+    plusBtn.addEventListener('click', function () { quickAdjust(item, 1); });
+
+    wrap.appendChild(minusBtn);
+    wrap.appendChild(plusBtn);
     return wrap;
   }
 
@@ -354,7 +494,12 @@
       if (item.tracking_mode === 'fill_level') {
         qtyTd.appendChild(buildFillMeter(item));
       } else {
-        qtyTd.textContent = item.quantity + ' ' + (item.unit || '');
+        var qtyText = document.createElement('span');
+        qtyText.textContent = item.quantity + ' ' + (item.unit || '');
+        qtyTd.appendChild(qtyText);
+      }
+      if (item.status === 'active') {
+        qtyTd.appendChild(buildQtyAdjustButtons(item));
       }
       tr.appendChild(qtyTd);
 
@@ -403,21 +548,9 @@
       editBtn.textContent = 'Edit';
       editBtn.className = 'small';
       editBtn.addEventListener('click', function () {
-        startInlineLocationEdit(item, actionsTd);
+        startFullFieldEdit(item, tr);
       });
       actionsTd.appendChild(editBtn);
-
-      var editDatesBtn = document.createElement('button');
-      editDatesBtn.textContent = 'Edit dates';
-      editDatesBtn.className = 'small';
-      editDatesBtn.addEventListener('click', function () {
-        var updates = promptDates(item);
-        if (updates === null) return;
-        apiFetch('/items/' + item.id, { method: 'PATCH', body: JSON.stringify(updates) })
-          .then(refresh)
-          .catch(function (err) { alert(err.message); });
-      });
-      actionsTd.appendChild(editDatesBtn);
 
       var modeBtn = document.createElement('button');
       modeBtn.className = 'small';

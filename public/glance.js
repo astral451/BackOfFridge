@@ -67,6 +67,64 @@
     return item.quantity + (item.unit ? ' ' + item.unit : '');
   }
 
+  // Quick +/- for the common "used/added one" case, with no prompt - the
+  // one deliberate exception to this page's otherwise read-only design.
+  // Count-tracked items step by 1; fill-level items step by 10 percentage
+  // points, and a - at or below 10% fully consumes the item instead of
+  // going negative (mirrors reduceQuantity's floor-at-zero on the server).
+  function quickAdjust(item, delta) {
+    if (item.tracking_mode === 'fill_level') {
+      var current = item.fill_percent != null ? item.fill_percent : 100;
+      if (delta < 0 && current <= 10) {
+        apiFetch('/items/' + item.id + '/consume', { method: 'POST', body: JSON.stringify({}) })
+          .then(refresh)
+          .catch(function (err) { alert(err.message); });
+        return;
+      }
+      var newPct = Math.max(0, Math.min(100, current + delta * 10));
+      apiFetch('/items/' + item.id, { method: 'PATCH', body: JSON.stringify({ fill_percent: newPct }) })
+        .then(refresh)
+        .catch(function (err) { alert(err.message); });
+    } else if (delta < 0) {
+      apiFetch('/items/' + item.id + '/consume', {
+        method: 'POST',
+        body: JSON.stringify({ quantity: Math.min(1, item.quantity) }),
+      })
+        .then(refresh)
+        .catch(function (err) { alert(err.message); });
+    } else {
+      apiFetch('/items/' + item.id, {
+        method: 'PATCH',
+        body: JSON.stringify({ quantity: item.quantity + 1 }),
+      })
+        .then(refresh)
+        .catch(function (err) { alert(err.message); });
+    }
+  }
+
+  function buildQtyAdjustButtons(item) {
+    var wrap = document.createElement('div');
+    wrap.className = 'qty-adjust';
+
+    var minusBtn = document.createElement('button');
+    minusBtn.type = 'button';
+    minusBtn.textContent = '−';
+    minusBtn.className = 'small';
+    minusBtn.title = item.tracking_mode === 'fill_level' ? '-10%' : '-1';
+    minusBtn.addEventListener('click', function () { quickAdjust(item, -1); });
+
+    var plusBtn = document.createElement('button');
+    plusBtn.type = 'button';
+    plusBtn.textContent = '+';
+    plusBtn.className = 'small';
+    plusBtn.title = item.tracking_mode === 'fill_level' ? '+10%' : '+1';
+    plusBtn.addEventListener('click', function () { quickAdjust(item, 1); });
+
+    wrap.appendChild(minusBtn);
+    wrap.appendChild(plusBtn);
+    return wrap;
+  }
+
   function renderItems(items) {
     var body = document.getElementById('glanceBody');
     body.innerHTML = '';
@@ -98,7 +156,10 @@
 
       var countTd = document.createElement('td');
       countTd.setAttribute('data-label', 'Count');
-      countTd.textContent = countText(item);
+      var countSpan = document.createElement('span');
+      countSpan.textContent = countText(item);
+      countTd.appendChild(countSpan);
+      countTd.appendChild(buildQtyAdjustButtons(item));
       tr.appendChild(countTd);
 
       body.appendChild(tr);
