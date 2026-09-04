@@ -80,22 +80,64 @@
     document.getElementById('f-expiration').focus();
   }
 
-  // Returns a partial-update body for PATCH /items/:id, or null if the user
-  // cancelled. Asks for location and quantity — the two fields people need to
-  // correct most often (moved it, or the count was wrong/changed).
-  function promptEdits(item) {
-    var location = window.prompt('Location for "' + item.name + '":', item.location || '');
-    if (location === null) return null;
+  // Replaces the actions cell with an inline location <select> (a real
+  // dropdown, unlike window.prompt() which is plain text only and can't
+  // render one) plus a quantity input and Save/Cancel. Cancel just calls
+  // refresh() to redraw the row normally rather than trying to restore the
+  // original buttons by hand.
+  function startInlineLocationEdit(item, actionsTd) {
+    actionsTd.innerHTML = '';
 
-    var qtyInput = window.prompt('Quantity on hand for "' + item.name + '":', item.quantity);
-    if (qtyInput === null) return null;
-    var quantity = parseFloat(qtyInput);
-    if (!(quantity >= 0)) {
-      alert('Enter a number of zero or more.');
-      return null;
-    }
+    var select = document.createElement('select');
+    select.disabled = true;
+    var loadingOpt = document.createElement('option');
+    loadingOpt.textContent = 'Loading locations...';
+    select.appendChild(loadingOpt);
 
-    return { location: location, quantity: quantity };
+    var qtyInput = document.createElement('input');
+    qtyInput.type = 'number';
+    qtyInput.step = 'any';
+    qtyInput.value = item.quantity;
+    qtyInput.className = 'inline-edit-qty';
+
+    var saveBtn = document.createElement('button');
+    saveBtn.textContent = 'Save';
+    saveBtn.className = 'small';
+    saveBtn.addEventListener('click', function () {
+      var quantity = parseFloat(qtyInput.value);
+      if (!(quantity >= 0)) {
+        alert('Enter a number of zero or more.');
+        return;
+      }
+      apiFetch('/items/' + item.id, {
+        method: 'PATCH',
+        body: JSON.stringify({ location: select.value, quantity: quantity }),
+      })
+        .then(refresh)
+        .catch(function (err) { alert(err.message); });
+    });
+
+    var cancelBtn = document.createElement('button');
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.className = 'small';
+    cancelBtn.addEventListener('click', refresh);
+
+    actionsTd.appendChild(select);
+    actionsTd.appendChild(qtyInput);
+    actionsTd.appendChild(saveBtn);
+    actionsTd.appendChild(cancelBtn);
+
+    apiFetch('/locations').then(function (locations) {
+      select.innerHTML = '';
+      locations.forEach(function (loc) {
+        var opt = document.createElement('option');
+        opt.value = loc;
+        opt.textContent = loc;
+        select.appendChild(opt);
+      });
+      select.value = item.location;
+      select.disabled = false;
+    }).catch(function (err) { alert(err.message); });
   }
 
   var DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -261,11 +303,7 @@
       editBtn.textContent = 'Edit';
       editBtn.className = 'small';
       editBtn.addEventListener('click', function () {
-        var updates = promptEdits(item);
-        if (updates === null) return;
-        apiFetch('/items/' + item.id, { method: 'PATCH', body: JSON.stringify(updates) })
-          .then(refresh)
-          .catch(function (err) { alert(err.message); });
+        startInlineLocationEdit(item, actionsTd);
       });
       actionsTd.appendChild(editBtn);
 

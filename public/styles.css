@@ -67,6 +67,11 @@ button.small {
   margin-right: 0.25rem;
 }
 
+.inline-edit-qty {
+  width: 4.5em;
+  margin-right: 0.25rem;
+}
+
 .low-stock-badge {
   display: inline-block;
   font-size: 0.75rem;
