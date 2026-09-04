@@ -13,10 +13,13 @@ router.get('/locations', (req, res) => {
 // GET /api/locations/detail - locations with how many items currently reference
 // each one, for the "manage locations" page
 router.get('/locations/detail', (req, res) => {
+  // Explicit COLLATE NOCASE: i.location (items table) has no declared
+  // collation, so without this the join would use its default BINARY
+  // comparison instead of inheriting locations.name's NOCASE.
   const rows = db.prepare(`
     SELECT l.name AS name, COUNT(i.id) AS itemCount
     FROM locations l
-    LEFT JOIN items i ON i.location = l.name
+    LEFT JOIN items i ON i.location = l.name COLLATE NOCASE
     GROUP BY l.name
     ORDER BY l.name
   `).all();
@@ -40,7 +43,7 @@ router.delete('/locations/:name', (req, res) => {
   const existing = db.prepare('SELECT name FROM locations WHERE name = ?').get(name);
   if (!existing) return res.status(404).json({ error: 'not found' });
 
-  const itemCount = db.prepare('SELECT COUNT(*) AS c FROM items WHERE location = ?').get(name).c;
+  const itemCount = db.prepare('SELECT COUNT(*) AS c FROM items WHERE location = ? COLLATE NOCASE').get(name).c;
   if (itemCount > 0) {
     return res.status(400).json({
       error: `${itemCount} item(s) still use "${name}". Move or delete them first.`,

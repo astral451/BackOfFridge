@@ -42,9 +42,24 @@ if (!existingColumns.includes('prev_quantity')) {
 // independently of whatever items currently happen to reference them.
 db.exec(`
   CREATE TABLE IF NOT EXISTS locations (
-    name TEXT PRIMARY KEY
+    name TEXT PRIMARY KEY COLLATE NOCASE
   );
 `);
+
+// Migration: give an existing (pre-NOCASE) locations table case-insensitive
+// matching, so "Fridge" and "fridge" are treated as the same location
+// instead of silently becoming two managed locations. SQLite can't ALTER a
+// column's collation in place, so this recreates the table and copies rows
+// over - guarded to run only once by checking the stored table definition.
+const locationsSql = db.prepare("SELECT sql FROM sqlite_master WHERE name='locations'").get();
+if (locationsSql && !locationsSql.sql.includes('COLLATE NOCASE')) {
+  db.exec(`
+    CREATE TABLE locations_new (name TEXT PRIMARY KEY COLLATE NOCASE);
+    INSERT OR IGNORE INTO locations_new (name) SELECT name FROM locations;
+    DROP TABLE locations;
+    ALTER TABLE locations_new RENAME TO locations;
+  `);
+}
 
 // Backfill: any location already used by an existing item becomes a managed
 // location, so nothing already in use silently disappears from the list.

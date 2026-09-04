@@ -35,7 +35,7 @@ router.get('/', (req, res) => {
     params.status = status;
   }
   if (location) {
-    clauses.push('location = @location');
+    clauses.push('location = @location COLLATE NOCASE');
     params.location = location;
   }
   if (category) {
