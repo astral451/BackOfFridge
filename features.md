@@ -80,6 +80,45 @@
   redirect → logged-in flow. Full multi-family isolation is shelved below
   as a distinct, larger, "only if actually needed" item — it isn't required
   for this and wasn't built.
+- Location matching is now case-insensitive — `locations.name` has a
+  `COLLATE NOCASE` primary key (a guarded recreate-and-copy migration for
+  existing databases, since SQLite can't alter a column's collation in
+  place), so "Fridge" and "fridge" are treated as the same managed
+  location instead of silently becoming two. Every query comparing
+  `items.location` against `locations.name` (the `/locations/detail` join,
+  the delete-in-use check, the `GET /api/items?location=` filter) got an
+  explicit `COLLATE NOCASE` added too, since SQLite's collation-precedence
+  rule favors the left operand's own collation and `items.location` has
+  none declared — relying on `locations.name`'s NOCASE alone wouldn't have
+  been enough.
+- The Edit button's location field is now a real `<select>` instead of a
+  `window.prompt()` (which is plain text only and can't render a
+  dropdown) — clicking Edit swaps the row's actions cell for an inline
+  panel with a location dropdown (populated from `GET /api/locations`,
+  pre-selected to the current value) plus a quantity input and Save/
+  Cancel buttons.
+- Live search across all fields, and sorting — a search box filters the
+  item list as you type (name, location, category, tag, notes, unit,
+  status, case-insensitive substring match), and a sort control switches
+  between the default expiration-first order, recently-added, and name.
+  Both operate client-side on the already-loaded item list (`lastItems` in
+  `public/app.js`), no new network round trips.
+- Item categorization ("tags") — a second single-value managed list,
+  distinct from the existing `category` field (which stays the
+  perishable/nonperishable enum, untouched). Mirrors the Locations pattern
+  end-to-end: a case-insensitive `tags` table, a "Manage tags" page
+  (`public/tags.html`), a tag `<select>` in the purchase form, a Tag
+  column and filter dropdown in the item list, and `GET/POST/DELETE
+  /api/tags` routes (delete refused while any item still references the
+  tag).
+- Quick-add dictation box — a freeform text input above the purchase form.
+  Dictation itself needed no app code (every phone keyboard already
+  dictates into any text field); a naive `parseQuickAdd()` heuristic
+  splits the typed/dictated line on commas, guesses name/quantity/unit and
+  matches remaining segments against the known locations/tags lists, then
+  pre-fills the existing detailed form for the user to review and adjust —
+  it does not submit directly, since the parser is fragile on odd
+  phrasing.
 
 ## Roadmap
 
@@ -91,34 +130,6 @@ priority — a Low item isn't necessarily more worth doing than a High one.
   ever built (see the shelved item below), this list would need to be
   scoped per family like everything else — not needed for the single
   shared inventory this app has today.
-- **Location editing: dropdown + case-insensitive** — two distinct pieces:
-  - *Case-insensitive matching (Low), worth doing regardless of the
-    dropdown question below.* Right now typing "Fridge" via "+ Add new
-    location" when "fridge" already exists creates a second, separate
-    managed location (`db.ensureLocation` in `server/src/db.js` does an
-    exact-match `INSERT OR IGNORE`). Normalizing on lookup/insert is a
-    small, contained fix in one place that prevents accidental duplicates
-    everywhere locations get created (purchase form, "Manage locations,"
-    and the Edit flow below), not just in one of them.
-  - *A real dropdown in the Edit flow (Medium, not Low).* The purchase
-    form's location field is already a proper `<select>` (built earlier
-    specifically to fix this same mistyping problem there), but the Edit
-    button's `promptEdits` (`public/app.js`) still uses a sequential
-    `window.prompt()` for location — and `window.prompt()` is plain text
-    only, it can't render a dropdown. Getting a real dropdown into Edit
-    means moving that one field off the prompt-sequence pattern into a
-    small inline picker — a real UI change, not a one-line swap, despite
-    sounding like a small ask.
-- **Item categorization (Low/Medium)** — a managed list of categories
-  (dairy, produce, cleaning supplies, etc.), distinct from the existing
-  `category` field (which is a fixed `perishable`/`nonperishable` enum
-  that drives no other logic — repurposing it would break that meaning,
-  so this needs its own field, e.g. `tags`). Once named distinctly, this
-  is close to a repeat of the already-shipped **Locations** pattern
-  (`server/src/db.js`'s `locations` table, `server/src/routes/meta.js`'s
-  `/locations` CRUD routes, `public/locations.html`: a managed list,
-  add/delete, dropdown in the purchase form, filter in the item list) —
-  mostly copying that shape for a new field rather than inventing one.
 - **Barcode/visual scanning** — scan a barcode or product photo to quickly
   re-up an item instead of retyping it (builds on "Buy again").
 - **Photo capture + recall (Low/Medium)** — **decided: manual only, no
@@ -135,23 +146,17 @@ priority — a Low item isn't necessarily more worth doing than a High one.
   image matching, likely an external vision API call per photo, and
   barcode scanning above already covers the same "auto-identify a
   product" goal far more cheaply and reliably if that's ever wanted.)
-- **Dictation for adding items (Low) — decided direction.** Every
-  iOS/Android keyboard already has a built-in dictation mic button on any
-  text field, so this doesn't need the app to build speech recognition at
-  all: a freeform "quick add" text box ("milk, 1 gallon, fridge"), split on
-  commas/keywords into name/quantity/unit/location, **pre-fills the
-  existing add-item form for the user to review and adjust before
-  saving** — it doesn't submit directly from the parsed text. Dictation
-  itself is free via the OS keyboard; the only real work is the parser,
-  and a naive one is simple but fragile on odd phrasing. Two alternatives
-  considered and not chosen: parsing via an LLM call instead of regex
-  (Medium — more robust, but a new external dependency/API key/per-call
-  cost) and in-browser live speech-to-text via the Web Speech API
-  (Medium-High — real cross-browser risk, decent in Chrome/Android but
-  inconsistent-to-absent in Safari/iOS and Firefox; this app has already
-  hit browser-compatibility surprises twice on exactly this kind of
-  not-universally-supported API — the location `<datalist>`, the vertical
-  fill-level slider — same risk class here).
+- **Dictation for adding items — better parsing.** The freeform quick-add
+  box + naive regex parser shipped above; two fancier alternatives were
+  considered and not chosen for that pass, still available as a fast-
+  follow if the naive parser proves too fragile in practice: parsing via
+  an LLM call instead of regex (Medium — more robust, but a new external
+  dependency/API key/per-call cost) and in-browser live speech-to-text via
+  the Web Speech API (Medium-High — real cross-browser risk, decent in
+  Chrome/Android but inconsistent-to-absent in Safari/iOS and Firefox;
+  this app has already hit browser-compatibility surprises twice on
+  exactly this kind of not-universally-supported API — the location
+  `<datalist>`, the vertical fill-level slider — same risk class here).
 - **AI agent with direct DB/API access — on hold, "not worth it yet."**
   Similar goal to dictation above, but by letting an agent (e.g. Claude)
   call the API on your behalf instead of the app doing speech-to-text
@@ -181,24 +186,6 @@ priority — a Low item isn't necessarily more worth doing than a High one.
     Quick Tunnel. Graded High as a whole not because any one piece is
     novel, but because it touches auth again, needs a stable public
     endpoint, and needs an external integration layer all together.
-- **Live search, on all fields (Low)** — a text box that filters the item
-  list as you type, no submit button, matching across every field (name,
-  location, category, notes, unit, status), not just name. The app already
-  loads the full active item list into the page for the status/location
-  filters, so this is a client-side filter over that in-memory list
-  (instant, no network round trip, no debounce needed) rather than a new
-  server endpoint — widening the fields checked per keystroke doesn't
-  change that approach. Worth revisiting only if the item list gets large
-  enough that loading everything upfront stops being practical.
-- **Sorting: recently-added / name (Low)** — a small control (Default /
-  Recently added / Name) to re-sort the item list; the current
-  expiration-first ordering stays the default. `GET /api/items`
-  (`server/src/routes/items.js`) already orders by
-  `expiration_date IS NULL, expiration_date ASC, created_at DESC`, and
-  both new sort keys (`created_at`, `name`) already exist as columns —
-  simplest approach, consistent with live search above, is sorting the
-  same in-memory array client-side in `renderItems`
-  (`public/app.js`) rather than a server-side `sort=` param.
 - **Favorites filter** — surface the most-purchased items for quick re-up.
   Now unblocked: `item_events` (shipped above) has a `purchased` event per
   purchase, so this is a `GROUP BY item_name` count over that table filtered
