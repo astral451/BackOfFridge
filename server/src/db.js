@@ -148,6 +148,34 @@ if (!eventColumns.includes('username')) {
   db.exec('ALTER TABLE item_events ADD COLUMN username TEXT');
 }
 
+// Categorization ("tags" internally - the column is named `tag` to avoid
+// colliding with the existing `category` column, which stays exactly as-is:
+// the unrelated perishable/nonperishable enum). Mirrors the `locations`
+// pattern: a managed list, one value per item, case-insensitive.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS tags (
+    name TEXT PRIMARY KEY COLLATE NOCASE
+  );
+`);
+
+function ensureTag(name) {
+  if (name) {
+    db.prepare('INSERT OR IGNORE INTO tags (name) VALUES (?)').run(name);
+  }
+}
+
+if (!existingColumns.includes('tag')) {
+  db.exec("ALTER TABLE items ADD COLUMN tag TEXT NOT NULL DEFAULT ''");
+}
+
+// Backfill, same reasoning as locations: any tag already on an item becomes
+// a managed tag, so nothing already in use silently disappears.
+db.exec(`
+  INSERT OR IGNORE INTO tags (name)
+  SELECT DISTINCT tag FROM items WHERE tag != ''
+`);
+
 module.exports = db;
 module.exports.ensureLocation = ensureLocation;
+module.exports.ensureTag = ensureTag;
 module.exports.recordEvent = recordEvent;

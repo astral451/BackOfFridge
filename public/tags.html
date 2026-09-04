@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BackOfFridge - Tags</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>Manage Tags</h1>
+    <a href="index.html">&larr; Back to inventory</a>
+    <span id="whoami" class="stats"></span>
+    <button id="logoutBtn" class="small">Log out</button>
+  </header>
+
+  <main id="app">
+    <section class="add-form">
+      <h2>Add a tag</h2>
+      <form id="tagForm">
+        <input type="text" id="t-name" placeholder="New tag name" required>
+        <button type="submit">+ Add</button>
+      </form>
+    </section>
+
+    <section>
+      <table id="tagsTable">
+        <thead>
+          <tr><th>Tag</th><th>Items</th><th>Actions</th></tr>
+        </thead>
+        <tbody id="tagsBody"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script src="tags.js"></script>
+</body>
+</html>

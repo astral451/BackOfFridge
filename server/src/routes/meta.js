@@ -55,6 +55,53 @@ router.delete('/locations/:name', (req, res) => {
   res.status(204).end();
 });
 
+// GET /api/tags - managed tag/category names, for the purchase form/filter dropdowns
+router.get('/tags', (req, res) => {
+  const rows = db.prepare('SELECT name FROM tags ORDER BY name').all();
+  res.json(rows.map((r) => r.name));
+});
+
+// GET /api/tags/detail - tags with how many items currently reference each
+// one, for the "manage tags" page
+router.get('/tags/detail', (req, res) => {
+  const rows = db.prepare(`
+    SELECT t.name AS name, COUNT(i.id) AS itemCount
+    FROM tags t
+    LEFT JOIN items i ON i.tag = t.name COLLATE NOCASE
+    GROUP BY t.name
+    ORDER BY t.name
+  `).all();
+  res.json(rows);
+});
+
+// POST /api/tags - add a new managed tag. Body: { name }
+router.post('/tags', (req, res) => {
+  const name = (req.body.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'name is required' });
+  db.ensureTag(name);
+  log(`TAG ADDED "${name}"`);
+  res.status(201).json({ name });
+});
+
+// DELETE /api/tags/:name - remove a managed tag. Refuses if any item still
+// references it, so data is never silently orphaned.
+router.delete('/tags/:name', (req, res) => {
+  const name = req.params.name;
+  const existing = db.prepare('SELECT name FROM tags WHERE name = ?').get(name);
+  if (!existing) return res.status(404).json({ error: 'not found' });
+
+  const itemCount = db.prepare('SELECT COUNT(*) AS c FROM items WHERE tag = ? COLLATE NOCASE').get(name).c;
+  if (itemCount > 0) {
+    return res.status(400).json({
+      error: `${itemCount} item(s) still use "${name}". Move or delete them first.`,
+    });
+  }
+
+  db.prepare('DELETE FROM tags WHERE name = ?').run(name);
+  log(`TAG DELETED "${name}"`);
+  res.status(204).end();
+});
+
 // GET /api/stats - quick counts for a dashboard
 router.get('/stats', (req, res) => {
   const active = db.prepare(`SELECT COUNT(*) AS c FROM items WHERE status='active'`).get().c;

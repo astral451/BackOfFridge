@@ -71,6 +71,8 @@
     document.getElementById('f-category').value = item.category;
     document.getElementById('f-location-select').value = item.location;
     document.getElementById('f-location-new').classList.add('hidden');
+    document.getElementById('f-tag-select').value = item.tag || '';
+    document.getElementById('f-tag-new').classList.add('hidden');
     document.getElementById('f-unit').value = item.unit;
     document.getElementById('f-quantity').value = item.quantity > 0 ? item.quantity : 1;
     document.getElementById('f-purchase').value = new Date().toISOString().slice(0, 10);
@@ -248,6 +250,7 @@
 
       cell('Category', item.category);
       cell('Location', item.location);
+      cell('Tag', item.tag);
 
       var qtyTd = document.createElement('td');
       qtyTd.setAttribute('data-label', 'Qty');
@@ -404,6 +407,34 @@
     formSelect.value = currentFormVal;
   }
 
+  function renderTags(tags) {
+    var filterSelect = document.getElementById('filterTag');
+    var currentFilterVal = filterSelect.value;
+    filterSelect.innerHTML = '<option value="">All</option>';
+    tags.forEach(function (tag) {
+      var opt = document.createElement('option');
+      opt.value = tag;
+      opt.textContent = tag;
+      filterSelect.appendChild(opt);
+    });
+    filterSelect.value = currentFilterVal;
+
+    var formSelect = document.getElementById('f-tag-select');
+    var currentFormVal = formSelect.value;
+    formSelect.innerHTML = '<option value="">Select tag...</option>';
+    tags.forEach(function (tag) {
+      var opt = document.createElement('option');
+      opt.value = tag;
+      opt.textContent = tag;
+      formSelect.appendChild(opt);
+    });
+    var addNewOpt = document.createElement('option');
+    addNewOpt.value = '__new__';
+    addNewOpt.textContent = '+ Add new tag...';
+    formSelect.appendChild(addNewOpt);
+    formSelect.value = currentFormVal;
+  }
+
   var lastItems = [];
 
   // Case-insensitive substring match across every field worth searching,
@@ -415,7 +446,7 @@
     var filtered = lastItems;
     if (query) {
       filtered = lastItems.filter(function (item) {
-        return [item.name, item.location, item.category, item.notes, item.unit, item.status]
+        return [item.name, item.location, item.category, item.tag, item.notes, item.unit, item.status]
           .some(function (field) { return field && field.toLowerCase().indexOf(query) !== -1; });
       });
     }
@@ -437,6 +468,8 @@
     }
     var loc = document.getElementById('filterLocation').value;
     if (loc) params.set('location', loc);
+    var tag = document.getElementById('filterTag').value;
+    if (tag) params.set('tag', tag);
 
     apiFetch('/items?' + params.toString()).then(function (items) {
       lastItems = items;
@@ -444,12 +477,21 @@
     });
     apiFetch('/stats').then(renderStats);
     apiFetch('/locations').then(renderLocations);
+    apiFetch('/tags').then(renderTags);
   }
 
   function currentFormLocation() {
     var select = document.getElementById('f-location-select');
     if (select.value === '__new__') {
       return document.getElementById('f-location-new').value;
+    }
+    return select.value;
+  }
+
+  function currentFormTag() {
+    var select = document.getElementById('f-tag-select');
+    if (select.value === '__new__') {
+      return document.getElementById('f-tag-new').value;
     }
     return select.value;
   }
@@ -465,12 +507,24 @@
     }
   });
 
+  document.getElementById('f-tag-select').addEventListener('change', function () {
+    var newInput = document.getElementById('f-tag-new');
+    if (this.value === '__new__') {
+      newInput.classList.remove('hidden');
+      newInput.focus();
+    } else {
+      newInput.classList.add('hidden');
+      newInput.value = '';
+    }
+  });
+
   document.getElementById('itemForm').addEventListener('submit', function (e) {
     e.preventDefault();
     var payload = {
       name: document.getElementById('f-name').value,
       category: document.getElementById('f-category').value,
       location: currentFormLocation(),
+      tag: currentFormTag(),
       quantity: parseFloat(document.getElementById('f-quantity').value) || 1,
       unit: document.getElementById('f-unit').value,
       purchase_date: document.getElementById('f-purchase').value || null,
@@ -481,6 +535,7 @@
       e.target.reset();
       document.getElementById('f-category').value = 'perishable';
       document.getElementById('f-location-new').classList.add('hidden');
+      document.getElementById('f-tag-new').classList.add('hidden');
       refresh();
     }).catch(function (err) {
       alert(err.message);
@@ -490,6 +545,7 @@
   document.getElementById('refreshBtn').addEventListener('click', refresh);
   document.getElementById('filterActiveOnly').addEventListener('change', refresh);
   document.getElementById('filterLocation').addEventListener('change', refresh);
+  document.getElementById('filterTag').addEventListener('change', refresh);
   document.getElementById('searchBox').addEventListener('input', applyFiltersAndRender);
   document.getElementById('sortBy').addEventListener('change', applyFiltersAndRender);
 

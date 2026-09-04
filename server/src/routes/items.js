@@ -24,9 +24,9 @@ function serialize(row) {
   return { ...row, low_stock: lowStock };
 }
 
-// GET /api/items?status=active&location=fridge&expiring_within_days=3
+// GET /api/items?status=active&location=fridge&tag=dairy&expiring_within_days=3
 router.get('/', (req, res) => {
-  const { status, location, category, expiring_within_days } = req.query;
+  const { status, location, category, tag, expiring_within_days } = req.query;
   const clauses = [];
   const params = {};
 
@@ -41,6 +41,10 @@ router.get('/', (req, res) => {
   if (category) {
     clauses.push('category = @category');
     params.category = category;
+  }
+  if (tag) {
+    clauses.push('tag = @tag COLLATE NOCASE');
+    params.tag = tag;
   }
   if (expiring_within_days !== undefined) {
     clauses.push("expiration_date IS NOT NULL AND date(expiration_date) <= date('now', @days)");
@@ -76,6 +80,7 @@ router.post('/', (req, res) => {
     name,
     category = 'perishable',
     location = '',
+    tag = '',
     quantity = 1,
     unit = '',
     purchase_date = null,
@@ -100,10 +105,11 @@ router.post('/', (req, res) => {
   }
 
   const result = db.prepare(`
-    INSERT INTO items (name, category, location, quantity, unit, purchase_date, expiration_date, notes, tracking_mode, fill_percent, low_stock_threshold)
-    VALUES (@name, @category, @location, @quantity, @unit, @purchase_date, @expiration_date, @notes, @tracking_mode, @fill_percent, @low_stock_threshold)
-  `).run({ name, category, location, quantity, unit, purchase_date, expiration_date, notes, tracking_mode, fill_percent, low_stock_threshold });
+    INSERT INTO items (name, category, location, tag, quantity, unit, purchase_date, expiration_date, notes, tracking_mode, fill_percent, low_stock_threshold)
+    VALUES (@name, @category, @location, @tag, @quantity, @unit, @purchase_date, @expiration_date, @notes, @tracking_mode, @fill_percent, @low_stock_threshold)
+  `).run({ name, category, location, tag, quantity, unit, purchase_date, expiration_date, notes, tracking_mode, fill_percent, low_stock_threshold });
   db.ensureLocation(location);
+  db.ensureTag(tag);
 
   const row = db.prepare('SELECT * FROM items WHERE id = ?').get(result.lastInsertRowid);
   db.recordEvent(row.id, row.name, 'purchased', { quantity: row.quantity, unit: row.unit, location: row.location }, req.username);
@@ -116,7 +122,7 @@ router.patch('/:id', (req, res) => {
   if (!existing) return res.status(404).json({ error: 'not found' });
 
   const fields = [
-    'name', 'category', 'location', 'quantity', 'unit', 'purchase_date', 'expiration_date',
+    'name', 'category', 'location', 'tag', 'quantity', 'unit', 'purchase_date', 'expiration_date',
     'status', 'notes', 'tracking_mode', 'fill_percent', 'low_stock_threshold',
   ];
   const updates = {};
@@ -138,13 +144,14 @@ router.patch('/:id', (req, res) => {
 
   const merged = { ...existing, ...updates };
   db.prepare(`
-    UPDATE items SET name=@name, category=@category, location=@location, quantity=@quantity,
+    UPDATE items SET name=@name, category=@category, location=@location, tag=@tag, quantity=@quantity,
       unit=@unit, purchase_date=@purchase_date, expiration_date=@expiration_date,
       status=@status, notes=@notes, tracking_mode=@tracking_mode, fill_percent=@fill_percent,
       low_stock_threshold=@low_stock_threshold, updated_at=datetime('now')
     WHERE id=@id
   `).run(merged);
   if (updates.location) db.ensureLocation(updates.location);
+  if (updates.tag) db.ensureTag(updates.tag);
 
   const changedFields = Object.keys(updates);
   const onlyFillPercentChanged = changedFields.length === 1 && updates.fill_percent !== undefined;
