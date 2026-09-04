@@ -130,6 +130,26 @@ priority — a Low item isn't necessarily more worth doing than a High one.
   ever built (see the shelved item below), this list would need to be
   scoped per family like everything else — not needed for the single
   shared inventory this app has today.
+- **Full-field edit view (Low/Medium)** — the Edit button currently only
+  exposes location and quantity (`startInlineLocationEdit` in
+  `public/app.js`), with dates split off into a separate "Edit dates"
+  button/prompt sequence and everything else (name, category, tag, unit,
+  notes) not editable from the item list at all, even though the `PATCH
+  /api/items/:id` endpoint already accepts any field. Direction: replace
+  today's inline actions-cell panel with a small vertical field-by-field
+  grid — one row per field (Name, Category, Location, Tag, Quantity, Unit,
+  Purchased, Expires, Notes), label on the left and its input/select on
+  the right, all editable in place — reusing the exact same inputs already
+  built for the purchase form (the location/tag `<select>`s, the
+  fill-level slider for `fill_level`-tracked items) rather than inventing
+  new controls, and a single Save/Cancel pair for the whole grid instead
+  of per-field buttons. This retires `promptDates`'s separate
+  `window.prompt()` sequence too, since dates become just two more rows in
+  the same grid. Whether this lives inline in the row (like today) or
+  behind a small modal/expand is a layout detail, not a scope question —
+  either way it's the same one-grid-of-every-field approach, and "Edit
+  dates" stops being a separate button once it's just two rows in the same
+  place as everything else.
 - **Barcode/visual scanning** — scan a barcode or product photo to quickly
   re-up an item instead of retyping it (builds on "Buy again").
 - **Photo capture + recall (Low/Medium)** — **decided: manual only, no
