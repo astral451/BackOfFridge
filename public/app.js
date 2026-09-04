@@ -404,6 +404,32 @@
     formSelect.value = currentFormVal;
   }
 
+  var lastItems = [];
+
+  // Case-insensitive substring match across every field worth searching,
+  // then a sort - both operate on the already-fetched item list client-side
+  // rather than round-tripping to the server, since the full list is
+  // already loaded for the status/location filters.
+  function applyFiltersAndRender() {
+    var query = document.getElementById('searchBox').value.trim().toLowerCase();
+    var filtered = lastItems;
+    if (query) {
+      filtered = lastItems.filter(function (item) {
+        return [item.name, item.location, item.category, item.notes, item.unit, item.status]
+          .some(function (field) { return field && field.toLowerCase().indexOf(query) !== -1; });
+      });
+    }
+
+    var sortBy = document.getElementById('sortBy').value;
+    if (sortBy === 'recent') {
+      filtered = filtered.slice().sort(function (a, b) { return b.created_at.localeCompare(a.created_at); });
+    } else if (sortBy === 'name') {
+      filtered = filtered.slice().sort(function (a, b) { return a.name.localeCompare(b.name); });
+    }
+
+    renderItems(filtered);
+  }
+
   function refresh() {
     var params = new URLSearchParams();
     if (document.getElementById('filterActiveOnly').checked) {
@@ -412,7 +438,10 @@
     var loc = document.getElementById('filterLocation').value;
     if (loc) params.set('location', loc);
 
-    apiFetch('/items?' + params.toString()).then(renderItems);
+    apiFetch('/items?' + params.toString()).then(function (items) {
+      lastItems = items;
+      applyFiltersAndRender();
+    });
     apiFetch('/stats').then(renderStats);
     apiFetch('/locations').then(renderLocations);
   }
@@ -461,6 +490,8 @@
   document.getElementById('refreshBtn').addEventListener('click', refresh);
   document.getElementById('filterActiveOnly').addEventListener('change', refresh);
   document.getElementById('filterLocation').addEventListener('change', refresh);
+  document.getElementById('searchBox').addEventListener('input', applyFiltersAndRender);
+  document.getElementById('sortBy').addEventListener('change', applyFiltersAndRender);
 
   loadWhoAmI();
   refresh();

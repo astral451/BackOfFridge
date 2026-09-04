@@ -42,6 +42,14 @@
     <section class="filters">
       <label><input type="checkbox" id="filterActiveOnly" checked> Active only</label>
       <label>Location: <select id="filterLocation"><option value="">All</option></select></label>
+      <input type="text" id="searchBox" placeholder="Search...">
+      <label>Sort:
+        <select id="sortBy">
+          <option value="">Default</option>
+          <option value="recent">Recently added</option>
+          <option value="name">Name</option>
+        </select>
+      </label>
       <button id="refreshBtn">Refresh</button>
     </section>
 
