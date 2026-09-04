@@ -119,60 +119,36 @@
   pre-fills the existing detailed form for the user to review and adjust —
   it does not submit directly, since the parser is fragile on odd
   phrasing.
+- Quick +/- buttons — a `−`/`+` pair next to each active item's quantity
+  (full item list) or count (At a Glance), for the common "used/added one"
+  case with no prompt. Count-tracked items step by 1 (`−` calls `/consume`
+  for one unit, `+` is a plain quantity PATCH); fill-level items step by
+  10 percentage points, and a `−` at or below 10% fully consumes the item
+  instead of going negative, mirroring how `reduceQuantity`
+  (`server/src/routes/items.js`) already floors a count-based consume at
+  zero server-side. At a Glance is otherwise read-only by design — this is
+  a deliberate small exception for one fast, low-risk action. A specific
+  amount, or throwing out instead of consuming, still goes through the
+  existing prompt/button flow.
+- Full-field edit view — replaces the old location/quantity-only inline
+  panel (and the separate "Edit dates" prompt sequence) with a vertical,
+  one-row-per-field grid covering every editable field (name, category,
+  location, tag, quantity/unit or fill %, purchase/expiration dates,
+  notes), reusing the same inputs already built for the purchase form.
+  Replaces the whole table row with one colspan'd cell (`startFullFieldEdit`
+  in `public/app.js`) rather than cramming every field into the narrow
+  actions column.
 
 ## Roadmap
 
 Difficulty grades below (Low/Medium/High) are rough cost/complexity, not
 priority — a Low item isn't necessarily more worth doing than a High one.
 
-- **Quick +/- buttons, in both the full item list and At a Glance (Low)** —
-  a faster path than the current prompt for the common case of "used one."
-  Direction: a `−`/`+` pair next to each item's quantity (or fill meter) in
-  both `public/index.html`'s full item table and the read-only
-  `public/glance.html` view, each tap immediately calling `/consume` (`−`)
-  or a small quantity-increase PATCH (`+`) with no prompt — replacing
-  today's `promptQuantity` (`public/app.js`), which always prompts whenever
-  quantity > 1. Since At a Glance is otherwise read-only by design (no edit
-  controls, just a status view), adding `−`/`+` there is a deliberate small
-  exception for this one fast, low-risk action — not a reversal of that
-  page's no-editing intent.
-  - *Count-tracked items:* `−` removes 1 (same as today's no-prompt path
-    when quantity is already 1); `+` adds 1 — both direct, no confirmation.
-  - *Fill-level items:* `−` drops the slider by 10 percentage points (15%
-    -> 5%); if it's already below 10% (i.e. 10 or under), `−` fully
-    consumes it instead of going negative, mirroring how `reduceQuantity`
-    (`server/src/routes/items.js`) already floors a count-based consume at
-    zero and flips status once nothing's left. `+` raises it by 10 points,
-    capped at 100.
-  - A specific amount other than the +/-10 step, or throwing out instead of
-    consuming, still goes through the existing prompt/button flow — this
-    only adds a fast path for the single-step case, it doesn't replace the
-    others.
 - **Location customization** — shipped for a single household (locations are
   now a managed list with add/delete). If full multi-family isolation is
   ever built (see the shelved item below), this list would need to be
   scoped per family like everything else — not needed for the single
   shared inventory this app has today.
-- **Full-field edit view (Low/Medium)** — the Edit button currently only
-  exposes location and quantity (`startInlineLocationEdit` in
-  `public/app.js`), with dates split off into a separate "Edit dates"
-  button/prompt sequence and everything else (name, category, tag, unit,
-  notes) not editable from the item list at all, even though the `PATCH
-  /api/items/:id` endpoint already accepts any field. Direction: replace
-  today's inline actions-cell panel with a small vertical field-by-field
-  grid — one row per field (Name, Category, Location, Tag, Quantity, Unit,
-  Purchased, Expires, Notes), label on the left and its input/select on
-  the right, all editable in place — reusing the exact same inputs already
-  built for the purchase form (the location/tag `<select>`s, the
-  fill-level slider for `fill_level`-tracked items) rather than inventing
-  new controls, and a single Save/Cancel pair for the whole grid instead
-  of per-field buttons. This retires `promptDates`'s separate
-  `window.prompt()` sequence too, since dates become just two more rows in
-  the same grid. Whether this lives inline in the row (like today) or
-  behind a small modal/expand is a layout detail, not a scope question —
-  either way it's the same one-grid-of-every-field approach, and "Edit
-  dates" stops being a separate button once it's just two rows in the same
-  place as everything else.
 - **Barcode/visual scanning** — scan a barcode or product photo to quickly
   re-up an item instead of retyping it (builds on "Buy again").
 - **Photo capture + recall (Low/Medium)** — **decided: manual only, no
