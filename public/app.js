@@ -82,6 +82,66 @@
     document.getElementById('f-expiration').focus();
   }
 
+  // Naive heuristic parser for the quick-add box. Dictation itself needs no
+  // app code - the phone keyboard's mic button dictates into any text field;
+  // this just turns the resulting freeform line into a best-guess set of
+  // form fields. Deliberately does NOT submit anything itself - it only
+  // pre-fills the existing detailed form for the user to review/adjust,
+  // since a naive comma/keyword split is fragile on odd phrasing.
+  function parseQuickAdd(text) {
+    var segments = text.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+    var result = { name: '', quantity: null, unit: '', location: '', tag: '', notes: '' };
+    if (!segments.length) return result;
+    result.name = segments[0];
+
+    var locations = Array.prototype.map.call(document.querySelectorAll('#f-location-select option'), function (o) { return o.value; })
+      .filter(function (v) { return v && v !== '__new__'; });
+    var tags = Array.prototype.map.call(document.querySelectorAll('#f-tag-select option'), function (o) { return o.value; })
+      .filter(function (v) { return v && v !== '__new__'; });
+
+    var leftover = [];
+    for (var i = 1; i < segments.length; i++) {
+      var seg = segments[i];
+      var qtyMatch = seg.match(/^(\d+(?:\.\d+)?)\s*(.*)$/);
+      var matchedLocation = locations.filter(function (loc) { return loc.toLowerCase() === seg.toLowerCase(); })[0];
+      var matchedTag = tags.filter(function (t) { return t.toLowerCase() === seg.toLowerCase(); })[0];
+
+      if (qtyMatch && result.quantity === null) {
+        result.quantity = parseFloat(qtyMatch[1]);
+        result.unit = qtyMatch[2].trim();
+      } else if (matchedLocation && !result.location) {
+        result.location = matchedLocation;
+      } else if (matchedTag && !result.tag) {
+        result.tag = matchedTag;
+      } else {
+        leftover.push(seg);
+      }
+    }
+    result.notes = leftover.join(', ');
+    return result;
+  }
+
+  // Pre-fills the purchase form from a parsed quick-add line and scrolls to
+  // it for review - mirrors fillFormFromItem's "pre-fill, don't submit"
+  // behavior, but only touches fields the parser actually found something
+  // for, leaving the rest (category, dates, etc.) as the user last left them.
+  function fillFormFromQuickAdd(parsed) {
+    document.getElementById('f-name').value = parsed.name;
+    if (parsed.quantity !== null) document.getElementById('f-quantity').value = parsed.quantity;
+    if (parsed.unit) document.getElementById('f-unit').value = parsed.unit;
+    if (parsed.location) {
+      document.getElementById('f-location-select').value = parsed.location;
+      document.getElementById('f-location-new').classList.add('hidden');
+    }
+    if (parsed.tag) {
+      document.getElementById('f-tag-select').value = parsed.tag;
+      document.getElementById('f-tag-new').classList.add('hidden');
+    }
+    if (parsed.notes) document.getElementById('f-notes').value = parsed.notes;
+    document.getElementById('f-name').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    document.getElementById('f-name').focus();
+  }
+
   // Replaces the actions cell with an inline location <select> (a real
   // dropdown, unlike window.prompt() which is plain text only and can't
   // render one) plus a quantity input and Save/Cancel. Cancel just calls
@@ -540,6 +600,15 @@
     }).catch(function (err) {
       alert(err.message);
     });
+  });
+
+  document.getElementById('quickAddForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var input = document.getElementById('quickAddInput');
+    var text = input.value.trim();
+    if (!text) return;
+    fillFormFromQuickAdd(parseQuickAdd(text));
+    input.value = '';
   });
 
   document.getElementById('refreshBtn').addEventListener('click', refresh);
