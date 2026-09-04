@@ -210,15 +210,29 @@ priority — a Low item isn't necessarily more worth doing than a High one.
   Now unblocked: `item_events` (shipped above) has a `purchased` event per
   purchase, so this is a `GROUP BY item_name` count over that table filtered
   to `event_type = 'purchased'`, rather than needing new tracking.
-- **Quick +/- for single-serve items** — a faster path than the current
-  prompt for the common case of "used one." Direction: tapping Consume
-  normally decrements by 1 immediately (no prompt), and a long-press opens
-  the existing quantity prompt for anything other than 1 (a specific amount,
-  or the whole remaining quantity). Throw-out likely gets the same tap/
-  long-press split for consistency. This changes today's `promptQuantity`
-  behavior (public/app.js), which currently always prompts whenever quantity
-  > 1 — the new default skips the prompt for the ordinary single-unit case
-  and only asks when the person deliberately holds for it.
+- **Quick +/- buttons, in both the full item list and At a Glance (Low)** —
+  a faster path than the current prompt for the common case of "used one."
+  Direction: a `−`/`+` pair next to each item's quantity (or fill meter) in
+  both `public/index.html`'s full item table and the read-only
+  `public/glance.html` view, each tap immediately calling `/consume` (`−`)
+  or a small quantity-increase PATCH (`+`) with no prompt — replacing
+  today's `promptQuantity` (`public/app.js`), which always prompts whenever
+  quantity > 1. Since At a Glance is otherwise read-only by design (no edit
+  controls, just a status view), adding `−`/`+` there is a deliberate small
+  exception for this one fast, low-risk action — not a reversal of that
+  page's no-editing intent.
+  - *Count-tracked items:* `−` removes 1 (same as today's no-prompt path
+    when quantity is already 1); `+` adds 1 — both direct, no confirmation.
+  - *Fill-level items:* `−` drops the slider by 10 percentage points (15%
+    -> 5%); if it's already below 10% (i.e. 10 or under), `−` fully
+    consumes it instead of going negative, mirroring how `reduceQuantity`
+    (`server/src/routes/items.js`) already floors a count-based consume at
+    zero and flips status once nothing's left. `+` raises it by 10 points,
+    capped at 100.
+  - A specific amount other than the +/-10 step, or throwing out instead of
+    consuming, still goes through the existing prompt/button flow — this
+    only adds a fast path for the single-step case, it doesn't replace the
+    others.
 - **Narrow-width layout: trim to the essentials** — on a constrained screen,
   actively drop low-value fields instead of just reflowing everything.
   Called out as non-critical at a glance: purchase date, category, and the
