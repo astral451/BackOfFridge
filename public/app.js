@@ -91,6 +91,12 @@
     fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18,
     nineteen: 19, twenty: 20, half: 0.5, quarter: 0.25, dozen: 12,
   };
+  // Dictation sometimes splits a teen number at the syllable boundary
+  // ("four teen" for "fourteen") - joined back to a numeral before anything
+  // else runs. Not extended past nineteen: "twenty" already works standalone
+  // via NUMBER_WORDS above, and beyond that dictation reliably gives plain
+  // digits, so there's no equivalent split-word case to handle there.
+  var TEEN_JOIN_WORDS = { two: 12, three: 13, four: 14, five: 15, six: 16, seven: 17, eight: 18, nine: 19 };
   var UNIT_WORDS = {
     ounce: 'oz', ounces: 'oz',
     pound: 'lb', pounds: 'lb', lbs: 'lb',
@@ -102,6 +108,20 @@
     gram: 'g', grams: 'g',
     kilogram: 'kg', kilograms: 'kg',
   };
+  var MONTH_NAMES = {
+    jan: 0, january: 0, feb: 1, february: 1, mar: 2, march: 2, apr: 3, april: 3,
+    may: 4, jun: 5, june: 5, jul: 6, july: 6, aug: 7, august: 7,
+    sep: 8, sept: 8, september: 8, oct: 9, october: 9, nov: 10, november: 10,
+    dec: 11, december: 11,
+  };
+  var QTY_REGEX = /^(\d+(?:\.\d+)?)\s*(.*)$/;
+  var FUZZY_THRESHOLD = 0.72;
+
+  function joinSplitTeens(text) {
+    return text.replace(/\b(two|three|four|five|six|seven|eight|nine)\s+teen\b/gi, function (m, word) {
+      return String(TEEN_JOIN_WORDS[word.toLowerCase()]);
+    });
+  }
 
   // Replaces a leading number word ("two" -> "2") and normalizes a trailing
   // unit word ("ounces" -> "oz") so the existing digit+unit regex below
@@ -119,49 +139,271 @@
     return words.join(' ');
   }
 
-  // Naive heuristic parser for the quick-add box. Dictation itself needs no
-  // app code - the phone keyboard's mic button dictates into any text field;
+  // Resolves "one"/"a"/"14" (already joined by joinSplitTeens if it was
+  // "four teen")/plain digit strings to a number, or null if it isn't one.
+  function resolveNumberWord(token) {
+    var lower = token.toLowerCase();
+    if (NUMBER_WORDS.hasOwnProperty(lower)) return NUMBER_WORDS[lower];
+    if (lower === 'a' || lower === 'an') return 1;
+    var n = parseFloat(token);
+    return isNaN(n) ? null : n;
+  }
+
+  // Plain Levenshtein edit distance, for fuzzy-matching a dictated location/
+  // tag ("Dinng Fridge") against the managed list ("Dining Fridge") instead
+  // of requiring an exact (case-insensitive) match.
+  function levenshtein(a, b) {
+    var m = a.length, n = b.length;
+    var dp = [];
+    for (var i = 0; i <= m; i++) { dp.push([i]); }
+    for (var j = 0; j <= n; j++) { dp[0][j] = j; }
+    for (i = 1; i <= m; i++) {
+      for (j = 1; j <= n; j++) {
+        dp[i][j] = a[i - 1] === b[j - 1]
+          ? dp[i - 1][j - 1]
+          : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+      }
+    }
+    return dp[m][n];
+  }
+
+  function similarity(a, b) {
+    if (!a || !b) return 0;
+    return 1 - levenshtein(a.toLowerCase(), b.toLowerCase()) / Math.max(a.length, b.length);
+  }
+
+  // Best entry in `list` for `candidate`, or null if nothing clears the
+  // threshold. An exact (case-insensitive) match has similarity 1, so this
+  // is a strict superset of a plain equality check.
+  function fuzzyMatch(candidate, list) {
+    var best = null;
+    var bestScore = 0;
+    list.forEach(function (item) {
+      var score = similarity(candidate, item);
+      if (score > bestScore) {
+        bestScore = score;
+        best = item;
+      }
+    });
+    return bestScore >= FUZZY_THRESHOLD ? best : null;
+  }
+
+  function formatISODate(year, monthIndex, day) {
+    var mm = String(monthIndex + 1);
+    if (mm.length < 2) mm = '0' + mm;
+    var dd = String(day);
+    if (dd.length < 2) dd = '0' + dd;
+    return year + '-' + mm + '-' + dd;
+  }
+
+  // Parses an "expires ..." phrase into an ISO date: a duration relative to
+  // the purchase date ("1 week"), a month-name date ("August 10th 2026"),
+  // or a numeric month/day/year date ("08 10 2026") - matching this app's
+  // own <input type="date"> fields, month before day. Returns null on
+  // anything else, rather than guessing wrong.
+  function parseExpirationPhrase(phrase, purchaseDateISO) {
+    phrase = phrase.trim();
+    if (!phrase) return null;
+
+    var durationMatch = phrase.match(/^(\S+)\s*(day|days|week|weeks|month|months|year|years)$/i);
+    if (durationMatch) {
+      var n = resolveNumberWord(durationMatch[1]);
+      if (n !== null) {
+        var base = purchaseDateISO ? new Date(purchaseDateISO + 'T00:00:00') : new Date();
+        var unit = durationMatch[2].toLowerCase();
+        if (unit.indexOf('day') === 0) base.setDate(base.getDate() + n);
+        else if (unit.indexOf('week') === 0) base.setDate(base.getDate() + n * 7);
+        else if (unit.indexOf('month') === 0) base.setMonth(base.getMonth() + n);
+        else base.setFullYear(base.getFullYear() + n);
+        return base.toISOString().slice(0, 10);
+      }
+    }
+
+    var monthNameMatch = phrase.match(/^([a-zA-Z]+)\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})$/);
+    if (monthNameMatch && MONTH_NAMES.hasOwnProperty(monthNameMatch[1].toLowerCase())) {
+      var day1 = parseInt(monthNameMatch[2], 10);
+      if (day1 >= 1 && day1 <= 31) {
+        return formatISODate(parseInt(monthNameMatch[3], 10), MONTH_NAMES[monthNameMatch[1].toLowerCase()], day1);
+      }
+    }
+
+    var numericMatch = phrase.match(/^(\d{1,2})[\s\/-](\d{1,2})[\s\/-](\d{2,4})$/);
+    if (numericMatch) {
+      var mm = parseInt(numericMatch[1], 10);
+      var dd = parseInt(numericMatch[2], 10);
+      var yyyy = parseInt(numericMatch[3], 10);
+      if (yyyy < 100) yyyy += 2000;
+      if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
+        return formatISODate(yyyy, mm - 1, dd);
+      }
+    }
+
+    return null;
+  }
+
+  // Finds "expires"/"expiration"/"exp" (optionally followed by "in"/"on"/
+  // ":") and strips it plus everything up to the next comma (or the end of
+  // the string) out of `text`, handing that phrase to parseExpirationPhrase.
+  function extractExpiration(text) {
+    var match = text.match(/\b(?:expires?|expiration|exp)\b\s*(?:in|on|:)?\s*([^,]*)/i);
+    if (!match) return { text: text, expiration: null };
+    var expiration = parseExpirationPhrase(match[1], document.getElementById('f-purchase').value);
+    var cleaned = text.slice(0, match.index) + text.slice(match.index + match[0].length);
+    return { text: cleaned.trim(), expiration: expiration };
+  }
+
+  // Finds an explicit "quantity <value>" keyword phrase and strips it out,
+  // so "Raw carrots quantity 1, 5 pounds, ..." sets quantity from the
+  // keyword rather than from the "5 pounds" segment later.
+  function extractQuantityKeyword(text) {
+    var match = text.match(/\bquantity\b\s*[:]?\s*([^\s,]+)/i);
+    if (!match) return { text: text, quantity: null };
+    var value = resolveNumberWord(match[1]);
+    if (value === null) return { text: text, quantity: null };
+    var cleaned = text.slice(0, match.index) + text.slice(match.index + match[0].length);
+    return { text: cleaned.trim(), quantity: value };
+  }
+
+  // Heuristic parser for the quick-add box. Dictation itself needs no app
+  // code - the phone keyboard's mic button dictates into any text field;
   // this just turns the resulting freeform line into a best-guess set of
   // form fields. Deliberately does NOT submit anything itself - it only
-  // pre-fills the existing detailed form for the user to review/adjust,
-  // since a naive comma/keyword split is fragile on odd phrasing.
+  // pre-fills the existing detailed form for the user to review/adjust.
+  //
+  // Commas are treated as absolute separators when present (segment 0 is
+  // always the name). Without a comma - or a dropped one - falls back to a
+  // space-tokenized pass that works from the outer boundaries inward: strip
+  // a trailing location match, then a trailing tag match, then a trailing
+  // quantity/unit match, and whatever's left at the front is the name. This
+  // is what keeps "Raw carrots 1 5lb kitchen fridge" and "Raw carrots
+  // quantity 1, 5 pounds, kitchen fridge" landing on the same parsed result.
   function parseQuickAdd(text) {
-    var segments = text.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
-    var result = { name: '', quantity: null, unit: '', location: '', tag: '', notes: '' };
-    if (!segments.length) return result;
-    result.name = segments[0];
+    text = joinSplitTeens(text.trim());
+
+    var expirationResult = extractExpiration(text);
+    text = expirationResult.text;
+
+    var quantityResult = extractQuantityKeyword(text);
+    text = quantityResult.text;
+
+    var result = {
+      name: '', quantity: quantityResult.quantity, unit: '', location: '', tag: '',
+      notes: '', expiration: expirationResult.expiration,
+    };
 
     var locations = Array.prototype.map.call(document.querySelectorAll('#f-location-select option'), function (o) { return o.value; })
       .filter(function (v) { return v && v !== '__new__'; });
     var tags = Array.prototype.map.call(document.querySelectorAll('#f-tag-select option'), function (o) { return o.value; })
       .filter(function (v) { return v && v !== '__new__'; });
 
-    var leftover = [];
-    for (var i = 1; i < segments.length; i++) {
-      var seg = normalizeQuickAddSegment(segments[i]);
-      var qtyMatch = seg.match(/^(\d+(?:\.\d+)?)\s*(.*)$/);
-      var matchedLocation = locations.filter(function (loc) { return loc.toLowerCase() === seg.toLowerCase(); })[0];
-      var matchedTag = tags.filter(function (t) { return t.toLowerCase() === seg.toLowerCase(); })[0];
+    if (text.indexOf(',') !== -1) {
+      var segments = text.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+      if (!segments.length) return result;
+      result.name = segments[0];
 
-      if (qtyMatch && result.quantity === null) {
-        result.quantity = parseFloat(qtyMatch[1]);
-        result.unit = qtyMatch[2].trim();
-      } else if (matchedLocation && !result.location) {
-        result.location = matchedLocation;
-      } else if (matchedTag && !result.tag) {
-        result.tag = matchedTag;
-      } else {
-        leftover.push(seg);
+      var leftover = [];
+      for (var i = 1; i < segments.length; i++) {
+        var seg = normalizeQuickAddSegment(segments[i]);
+        var qtyMatch = seg.match(QTY_REGEX);
+        var matchedLocation = fuzzyMatch(segments[i], locations);
+        var matchedTag = fuzzyMatch(segments[i], tags);
+
+        if (qtyMatch && result.quantity === null) {
+          result.quantity = parseFloat(qtyMatch[1]);
+          result.unit = qtyMatch[2].trim();
+        } else if (qtyMatch && !result.unit) {
+          // Quantity already known (explicit "quantity" keyword) - this
+          // segment is a pure unit descriptor, kept as one string ("5 lb").
+          result.unit = seg;
+        } else if (matchedLocation && !result.location) {
+          result.location = matchedLocation;
+        } else if (matchedTag && !result.tag) {
+          result.tag = matchedTag;
+        } else {
+          leftover.push(segments[i]);
+        }
       }
+      result.notes = leftover.join(', ');
+    } else if (text) {
+      var tokens = text.split(/\s+/).filter(Boolean);
+
+      // A window starting on a numeric-looking token ("5lb kitchen fridge")
+      // is never a real location/tag name - skipping it stops a longer
+      // window from scoring deceptively well against a real location just
+      // because Levenshtein similarity is lenient on a short prefix addition.
+      function startsNumeric(startIdx) {
+        return /^\d/.test(tokens[startIdx]);
+      }
+
+      for (var w = Math.min(3, tokens.length); w >= 1 && !result.location; w--) {
+        var locStart = tokens.length - w;
+        if (startsNumeric(locStart)) continue;
+        var loc = fuzzyMatch(tokens.slice(locStart).join(' '), locations);
+        if (loc) {
+          result.location = loc;
+          tokens = tokens.slice(0, locStart);
+        }
+      }
+
+      for (var w2 = Math.min(2, tokens.length); w2 >= 1 && !result.tag; w2--) {
+        var tagStart = tokens.length - w2;
+        if (startsNumeric(tagStart)) continue;
+        var tag = fuzzyMatch(tokens.slice(tagStart).join(' '), tags);
+        if (tag) {
+          result.tag = tag;
+          tokens = tokens.slice(0, tagStart);
+        }
+      }
+
+      // Smallest window first: a single trailing token ("5lb", a bare "3")
+      // is checked before a 2-token phrase ("5 pounds") - otherwise a
+      // 2-token window would too eagerly swallow a separate leading
+      // quantity ("1 5lb") as one spurious quantity+unit match instead of
+      // leaving "1" for the preceding-token check below to find.
+      var qtyFound = null;
+      var qtyConsumed = 0;
+      for (var w3 = 1; w3 <= Math.min(2, tokens.length) && !qtyFound; w3++) {
+        var qtyCandidate = normalizeQuickAddSegment(tokens.slice(tokens.length - w3).join(' '));
+        var m = qtyCandidate.match(QTY_REGEX);
+        if (m) {
+          qtyFound = { number: parseFloat(m[1]), unit: m[2].trim() };
+          qtyConsumed = w3;
+        }
+      }
+
+      if (qtyFound) {
+        tokens = tokens.slice(0, tokens.length - qtyConsumed);
+        var qtyDisplay = qtyFound.unit ? (qtyFound.number + ' ' + qtyFound.unit) : String(qtyFound.number);
+
+        // A separate bare number immediately before the match ("1 5lb") is
+        // the real quantity, with the matched number+unit becoming the unit
+        // description instead of overwriting it - only the immediately
+        // preceding token is checked, not the whole name, to avoid an
+        // ordinary name word being mistaken for a count.
+        var precedingVal = tokens.length ? resolveNumberWord(tokens[tokens.length - 1]) : null;
+
+        if (result.quantity === null && precedingVal !== null && qtyFound.unit) {
+          result.quantity = precedingVal;
+          result.unit = qtyDisplay;
+          tokens = tokens.slice(0, tokens.length - 1);
+        } else if (result.quantity === null) {
+          result.quantity = qtyFound.number;
+          result.unit = qtyFound.unit;
+        } else {
+          result.unit = qtyDisplay;
+        }
+      }
+
+      result.name = tokens.join(' ');
     }
-    result.notes = leftover.join(', ');
+
     return result;
   }
 
   // Pre-fills the purchase form from a parsed quick-add line and scrolls to
   // it for review - mirrors fillFormFromItem's "pre-fill, don't submit"
   // behavior, but only touches fields the parser actually found something
-  // for, leaving the rest (category, dates, etc.) as the user last left them.
+  // for, leaving the rest (category, etc.) as the user last left them.
   function fillFormFromQuickAdd(parsed) {
     document.getElementById('f-name').value = parsed.name;
     if (parsed.quantity !== null) document.getElementById('f-quantity').value = parsed.quantity;
@@ -174,6 +416,7 @@
       document.getElementById('f-tag-select').value = parsed.tag;
       document.getElementById('f-tag-new').classList.add('hidden');
     }
+    if (parsed.expiration) document.getElementById('f-expiration').value = parsed.expiration;
     if (parsed.notes) document.getElementById('f-notes').value = parsed.notes;
     document.getElementById('f-name').scrollIntoView({ behavior: 'smooth', block: 'center' });
     document.getElementById('f-name').focus();
