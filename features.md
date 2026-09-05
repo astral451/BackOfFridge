@@ -113,12 +113,24 @@
   tag).
 - Quick-add dictation box — a freeform text input above the purchase form.
   Dictation itself needed no app code (every phone keyboard already
-  dictates into any text field); a naive `parseQuickAdd()` heuristic
-  splits the typed/dictated line on commas, guesses name/quantity/unit and
-  matches remaining segments against the known locations/tags lists, then
+  dictates into any text field); `parseQuickAdd()` (`public/app.js`)
   pre-fills the existing detailed form for the user to review and adjust —
-  it does not submit directly, since the parser is fragile on odd
-  phrasing.
+  it does not submit directly, since the parser is a heuristic and stays
+  fragile on truly odd phrasing. Commas are treated as absolute separators
+  when present (segment 0 is always the name); without one, a tokenized
+  pass works from the outer boundaries inward — a trailing location match,
+  then a trailing tag match, then a trailing quantity/unit match, with
+  whatever's left at the front becoming the name — so "Raw carrots 1 5lb
+  kitchen fridge" and "Raw carrots quantity 1, 5 pounds, kitchen fridge"
+  land on the same result. Location/tag matching is fuzzy (a small
+  Levenshtein matcher), so a typo like "Dinng Fridge" still finds a
+  managed "Dining Fridge". An "expires ..." phrase is also recognized:
+  a month-name or numeric date (month-day-year, matching this app's own
+  date inputs) or a duration ("in 1 week") relative to the purchase date,
+  pre-filling the expiration field. Dictation splitting a teen number at
+  the syllable boundary ("four teen" for "fourteen") is joined back to a
+  numeral before any of this runs; not extended past nineteen, since
+  dictation reliably gives plain digits beyond that.
 - Quick +/- buttons — a `−`/`+` pair next to each active item's quantity
   (full item list) or count (At a Glance), for the common "used/added one"
   case with no prompt. Count-tracked items step by 1 (`−` calls `/consume`
