@@ -244,8 +244,12 @@
   // Finds "expires"/"expiration"/"exp" (optionally followed by "in"/"on"/
   // ":") and strips it plus everything up to the next comma (or the end of
   // the string) out of `text`, handing that phrase to parseExpirationPhrase.
+  // The trailing `(,\s*\d{4})?` covers dictation that writes a "Month Day,
+  // Year" date with the comma landing mid-date ("May 29, 2028") rather than
+  // as a real separator - without it, `[^,]*` alone stops right before the
+  // year and the date never parses.
   function extractExpiration(text) {
-    var match = text.match(/\b(?:expires?|expiration|exp)\b\s*(?:in|on|:)?\s*([^,]*)/i);
+    var match = text.match(/\b(?:expires?|expiration|exp)\b\s*(?:in|on|:)?\s*([^,]*(?:,\s*\d{4})?)/i);
     if (!match) return { text: text, expiration: null };
     var expiration = parseExpirationPhrase(match[1], document.getElementById('f-purchase').value);
     var cleaned = text.slice(0, match.index) + text.slice(match.index + match[0].length);
