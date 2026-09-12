@@ -1,20 +1,46 @@
 @import url('https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@600;700&family=Work+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap');
 
+/* Light theme ("Pantry Fresh") is the default - warm cream ground, fresh
+   sage-green accent, dark warm-brown text. Dark theme ("Cold Storage",
+   the original design) takes over automatically under
+   prefers-color-scheme: dark, so the app follows the browser/OS setting
+   with no manual toggle needed. */
 :root {
-  --bg: #1b2430;
-  --surface: #232e3d;
-  --surface-2: #161e28;
-  --border: #2c3948;
-  --text: #e7eef2;
-  --muted: #7f92a1;
-  --accent: #6fd6e0;
-  --accent-ink: #0c2126;
-  --warn-bg: #4a3a1c;
-  --warn-text: #e8a33d;
-  --danger-bg: #4a2222;
-  --danger-text: #e85d5d;
-  --soon-row-bg: rgba(232, 163, 61, 0.1);
-  --expired-row-bg: rgba(232, 93, 93, 0.14);
+  --bg: #faf6ef;
+  --surface: #ffffff;
+  --surface-2: #f1ead9;
+  --border: #e1d6bf;
+  --text: #2c2418;
+  --muted: #8a7c62;
+  --accent: #4f7942;
+  --accent-ink: #f5f9ef;
+  --warn-bg: #fbe8c6;
+  --warn-text: #8a5a10;
+  --danger-bg: #fbdede;
+  --danger-text: #a3312c;
+  --soon-row-bg: rgba(198, 138, 26, 0.1);
+  --expired-row-bg: rgba(163, 49, 44, 0.09);
+  --shadow: rgba(60, 48, 25, 0.18);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1b2430;
+    --surface: #232e3d;
+    --surface-2: #161e28;
+    --border: #2c3948;
+    --text: #e7eef2;
+    --muted: #7f92a1;
+    --accent: #6fd6e0;
+    --accent-ink: #0c2126;
+    --warn-bg: #4a3a1c;
+    --warn-text: #e8a33d;
+    --danger-bg: #4a2222;
+    --danger-text: #e85d5d;
+    --soon-row-bg: rgba(232, 163, 61, 0.1);
+    --expired-row-bg: rgba(232, 93, 93, 0.14);
+    --shadow: rgba(0, 0, 0, 0.5);
+  }
 }
 
 * { box-sizing: border-box; }
@@ -62,6 +88,7 @@ a { color: var(--accent); }
   margin-bottom: 0.5rem;
 }
 .key-gate a { font-size: 0.85rem; }
+.auth-error { color: var(--danger-text); font-size: 0.85rem; font-weight: 600; }
 
 header {
   display: flex;
@@ -287,7 +314,7 @@ button.small:disabled { opacity: 0.4; cursor: not-allowed; }
   border-top: 1px solid var(--border);
   border-radius: 18px 18px 0 0;
   padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px));
-  box-shadow: 0 -14px 30px -14px rgba(0,0,0,0.5);
+  box-shadow: 0 -14px 30px -14px var(--shadow);
   max-width: 480px;
   margin: 0 auto;
 }
@@ -385,7 +412,7 @@ body:has(.bottombar) { padding-bottom: 84px; } /* room for the fixed bottom bar 
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 10px;
-  box-shadow: 0 10px 24px -10px rgba(0,0,0,0.5);
+  box-shadow: 0 10px 24px -10px var(--shadow);
   overflow: hidden;
   z-index: 20;
   display: flex;
