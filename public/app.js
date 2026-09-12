@@ -1030,16 +1030,26 @@
     });
   });
 
-  document.getElementById('quickAddForm').addEventListener('submit', function (e) {
-    e.preventDefault();
+  function submitQuickAdd() {
     var input = document.getElementById('quickAddInput');
     var text = input.value.trim();
-    if (!text) return;
+    if (!text) return false;
     fillFormFromQuickAdd(parseQuickAdd(text));
     input.value = '';
+    return true;
+  }
+
+  document.getElementById('quickAddForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    submitQuickAdd();
   });
 
+  // "+" doubles as "process whatever's dictated/typed into quick-add" - on
+  // a phone keyboard, dictation often leaves text sitting in the field
+  // without the user ever pressing Return, and tapping "+" would otherwise
+  // silently discard it and open a blank form instead.
   document.getElementById('openSheetBtn').addEventListener('click', function () {
+    if (submitQuickAdd()) return;
     resetItemForm();
     openSheet();
     document.getElementById('f-name').focus();
