@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# Restarts the BackOfFridge container, backing up the database first.
+# Restarts the BackOfFridge container: backs up the database, pulls the
+# latest code, and rebuilds if anything actually changed.
 #
 # Usage:
-#   ./restart.sh          # stop, back up, start
-#   ./restart.sh --build  # stop, back up, rebuild the image, start (use
-#                          # this after a `git pull` that changed code)
+#   ./restart.sh          # stop, back up, git pull, start (rebuilding
+#                          # automatically if the pull brought in new code)
+#   ./restart.sh --build  # same, but always rebuild even if the pull was
+#                          # a no-op (e.g. you changed something else, like
+#                          # a Dockerfile base image, without a new commit)
 #
 # The backup is a stopped-container copy of the whole ./data folder (not
 # just inventory.db) - the database runs in WAL mode, so recent writes can
@@ -26,15 +29,15 @@ KEEP=20
 # reads the actual applied version out of the database instead.
 SCHEMA_VERSION="unversioned"
 
+echo "Stopping container..."
+docker compose stop
+
 if [ ! -d data ]; then
   echo "No ./data folder found yet - nothing to back up (first run?)."
 else
   mkdir -p "$BACKUP_ROOT"
   stamp=$(date +%Y%m%d-%H%M%S)
   dest="$BACKUP_ROOT/$stamp"
-
-  echo "Stopping container..."
-  docker compose stop
 
   echo "Backing up data/ -> $dest (schema version: $SCHEMA_VERSION)"
   cp -r data "$dest"
@@ -45,7 +48,25 @@ else
   ls -1dt "$BACKUP_ROOT"/*/ 2>/dev/null | tail -n +$((KEEP + 1)) | xargs -r rm -rf
 fi
 
-if [ "${1:-}" = "--build" ]; then
+echo "Pulling latest code..."
+if [ -n "$(git status --porcelain)" ]; then
+  echo "Local changes in the repo - not pulling automatically." >&2
+  echo "Commit, stash, or discard them first, then re-run." >&2
+  exit 1
+fi
+before=$(git rev-parse HEAD)
+git pull
+after=$(git rev-parse HEAD)
+
+if [ "$before" != "$after" ]; then
+  echo "Code changed ($before -> $after)."
+  rebuild=1
+else
+  echo "Already up to date."
+  rebuild=0
+fi
+
+if [ "${1:-}" = "--build" ] || [ "$rebuild" = "1" ]; then
   echo "Rebuilding and starting..."
   docker compose up -d --build
 else
