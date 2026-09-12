@@ -1,93 +1,397 @@
+@import url('https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@600;700&family=Work+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap');
+
+:root {
+  --bg: #1b2430;
+  --surface: #232e3d;
+  --surface-2: #161e28;
+  --border: #2c3948;
+  --text: #e7eef2;
+  --muted: #7f92a1;
+  --accent: #6fd6e0;
+  --accent-ink: #0c2126;
+  --warn-bg: #4a3a1c;
+  --warn-text: #e8a33d;
+  --danger-bg: #4a2222;
+  --danger-text: #e85d5d;
+  --soon-row-bg: rgba(232, 163, 61, 0.1);
+  --expired-row-bg: rgba(232, 93, 93, 0.14);
+}
+
 * { box-sizing: border-box; }
 body {
-  font-family: -apple-system, Helvetica, Arial, sans-serif;
+  font-family: "Work Sans", -apple-system, Helvetica, Arial, sans-serif;
   margin: 0;
-  padding: 1rem;
-  background: #fafafa;
-  color: #222;
+  padding: 16px;
+  padding-bottom: 32px;
+  background: var(--bg);
+  color: var(--text);
 }
+h1, h2, h3 { font-family: "Libre Franklin", sans-serif; font-weight: 700; }
+.hidden { display: none !important; }
+[hidden] { display: none !important; }
+a { color: var(--accent); }
+
+.key-gate {
+  max-width: 380px;
+  margin: 3rem auto;
+  text-align: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1.5rem;
+}
+.key-gate input {
+  width: 100%;
+  padding: 0.6rem 0.7rem;
+  margin-bottom: 0.5rem;
+  font-size: 16px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+.key-gate button {
+  width: 100%;
+  padding: 0.6rem 1rem;
+  border-radius: 9px;
+  border: none;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 700;
+  cursor: pointer;
+  margin-bottom: 0.5rem;
+}
+.key-gate a { font-size: 0.85rem; }
+
 header {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
+  gap: 8px 16px;
   margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
 }
-h1 { font-size: 1.4rem; margin: 0; }
-.stats { font-size: 0.9rem; color: #555; }
-.hidden { display: none; }
-.key-gate {
-  max-width: 400px;
-  margin: 3rem auto;
-  text-align: center;
-}
-.key-gate input { width: 60%; padding: 0.5rem; }
-.key-gate button { padding: 0.5rem 1rem; }
+h1 { font-size: 1.2rem; margin: 0; letter-spacing: 0.01em; }
+header a { font-size: 0.85rem; font-weight: 600; text-decoration: none; }
+header a:hover { text-decoration: underline; }
+.stats { font-size: 0.78rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 
-.add-form form {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
+button {
+  font-family: inherit;
 }
-.add-form input, .add-form select {
-  padding: 0.4rem;
-  flex: 1 1 140px;
-}
-.add-form button {
-  padding: 0.5rem 1rem;
-}
-.filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  align-items: center;
-  margin-bottom: 1rem;
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-  background: #fff;
-  font-size: 0.9rem;
-}
-th, td {
-  border: 1px solid #ddd;
-  padding: 0.4rem 0.5rem;
-  text-align: left;
-}
-th { background: #f0f0f0; }
-tr.expired { background: #ffe3e3; }
-tr.expiring-soon { background: #fff6d8; }
-tr.thrown_out, tr.consumed { opacity: 0.5; }
-
 button.small {
-  padding: 0.2rem 0.5rem;
-  font-size: 0.8rem;
-  margin-right: 0.25rem;
+  padding: 0.3rem 0.65rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+button.small:hover { border-color: var(--accent); }
+button.small:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ---------- quick-add composer ---------- */
+.composer {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 8px 10px;
+  margin-bottom: 12px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.composer input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 16px;
+  font-family: inherit;
+  padding: 6px 4px;
+}
+.composer input:focus { outline: none; }
+.composer button {
+  flex: 0 0 auto;
+  border: none;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 9px 14px;
+  cursor: pointer;
 }
 
-.inline-edit-qty {
-  width: 4.5em;
-  margin-right: 0.25rem;
+/* ---------- disclosure toggle (More fields / Filter & sort) ---------- */
+.disclosure-toggle {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 4px 2px;
+  cursor: pointer;
+  margin-bottom: 6px;
+}
+.disclosure-toggle:hover { color: var(--text); }
+
+/* ---------- form grid (Log a purchase / Filter & sort contents) ---------- */
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.form-grid.compact { grid-template-columns: 1fr 1fr; margin-bottom: 6px; }
+.form-grid .full { grid-column: 1 / -1; }
+.form-grid input, .form-grid select {
+  font: inherit;
+  font-size: 16px;
+  padding: 8px 9px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  width: 100%;
+}
+.form-grid label {
+  font-size: 0.78rem;
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.save-btn {
+  width: 100%;
+  display: block;
+  margin-top: 10px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: none;
+  border-radius: 9px;
+  padding: 10px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  cursor: pointer;
 }
 
-.qty-adjust {
+.filter-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.filter-panel input, .filter-panel select {
+  font: inherit;
+  font-size: 16px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  width: 100%;
+}
+.filter-panel label { font-size: 0.78rem; color: var(--muted); }
+
+/* ---------- status chips ---------- */
+.chip-row {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  margin-bottom: 10px;
+}
+.chip-row .chip {
+  flex: 0 0 auto;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 7px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.chip-row .chip.active {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
+}
+
+/* ---------- add-item sheet + bottom bar (narrow) / side panel (wide) ---------- */
+.add-shell { position: relative; }
+.bottombar {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 30;
+  background: var(--surface-2);
+  border-top: 1px solid var(--border);
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  gap: 8px;
+}
+.bottombar form { display: flex; flex: 1; gap: 8px; }
+.bottombar input {
+  flex: 1;
+  font-size: 16px;
+  padding: 10px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+.bottombar button {
+  flex: 0 0 auto;
+  width: 44px; height: 44px;
+  border-radius: 999px;
+  border: none;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 1.3rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.sheet {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 40;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  border-radius: 18px 18px 0 0;
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 -14px 30px -14px rgba(0,0,0,0.5);
+  max-width: 480px;
+  margin: 0 auto;
+}
+.sheet h2 { margin: 0 0 10px; font-size: 1rem; }
+.sheet-close {
+  position: absolute;
+  top: 12px; right: 14px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+body:has(.bottombar) { padding-bottom: 84px; } /* room for the fixed bottom bar */
+
+/* ---------- location groups + item rows ---------- */
+.group + .group { margin-top: 14px; }
+.group-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--muted);
+  font-family: "Libre Franklin", sans-serif;
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 8px 12px;
+  cursor: pointer;
+  margin-bottom: 6px;
+}
+.group-head .chev { transition: transform 0.15s ease; }
+.group-head.collapsed .chev { transform: rotate(-90deg); }
+.rows { display: flex; flex-direction: column; gap: 6px; }
+
+.item-row {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  position: relative;
 }
-.qty-adjust button {
-  padding: 0.1rem 0.5rem;
-  font-size: 0.9rem;
-  line-height: 1.2;
-}
+.item-row.expired { background: var(--expired-row-bg); }
+.item-row.expiring-soon { background: var(--soon-row-bg); }
+.item-row.thrown_out, .item-row.consumed { opacity: 0.5; }
+.row-main { flex: 1; min-width: 0; }
+.row-name { font-weight: 600; font-size: 0.92rem; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.row-meta { font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
+.badge { font-size: 0.6rem; font-weight: 700; padding: 1px 7px; border-radius: 999px; text-transform: uppercase; }
+.badge.soon { background: var(--warn-bg); color: var(--warn-text); }
+.badge.low { background: var(--danger-bg); color: var(--danger-text); }
 
-/* Full-field edit: a vertical, one-row-per-field grid replacing the item
-   row's cells entirely (a single colspan'd <td>) rather than cramming
-   every field into the narrow actions cell. */
+/* ---------- stepper (fixed width so every row lines up) ---------- */
+.stepper-wrap { flex: 0 0 116px; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.stepper {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--bg); border-radius: 9px; padding: 3px; min-width: 0;
+}
+.stepper button {
+  width: 26px; height: 26px; border-radius: 7px; border: none;
+  background: var(--surface-2); color: var(--accent);
+  font-weight: 700; font-size: 0.95rem; cursor: pointer; flex: 0 0 26px;
+}
+.stepper button:disabled { opacity: 0.35; cursor: not-allowed; }
+.qty-val {
+  font-family: "JetBrains Mono", monospace; font-size: 0.72rem;
+  font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; padding: 0 4px;
+}
+.fill-track { width: 100%; height: 6px; border-radius: 999px; background: var(--surface-2); position: relative; }
+.fill-bar { position: absolute; inset: 0; border-radius: 999px; background: var(--accent); }
+
+/* ---------- overflow menu ---------- */
+.overflow-btn {
+  flex: 0 0 auto;
+  width: 30px; height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  font-weight: 700;
+  cursor: pointer;
+}
+.overflow-menu {
+  position: absolute;
+  top: 100%; right: 12px;
+  margin-top: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 10px 24px -10px rgba(0,0,0,0.5);
+  overflow: hidden;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 160px;
+}
+.overflow-menu button {
+  text-align: left;
+  border: none;
+  background: none;
+  color: var(--text);
+  padding: 9px 14px;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.overflow-menu button:hover { background: var(--surface); }
+
+/* ---------- full-field edit grid ---------- */
 .full-edit-cell {
-  background: #fbfbfb;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
 }
 .full-edit-grid {
   display: grid;
@@ -96,67 +400,79 @@ button.small {
   align-items: center;
   max-width: 480px;
 }
-.full-edit-grid label {
-  font-weight: bold;
-  font-size: 0.85rem;
-}
-.full-edit-grid input,
-.full-edit-grid select {
-  padding: 0.3rem;
+.full-edit-grid label { font-weight: 600; font-size: 0.8rem; color: var(--muted); }
+.full-edit-grid input, .full-edit-grid select {
+  padding: 7px 8px;
   width: 100%;
+  font-size: 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
 }
-.full-edit-buttons {
-  margin-top: 0.75rem;
-}
+.full-edit-buttons { margin-top: 0.75rem; display: flex; gap: 8px; }
 
 .low-stock-badge {
   display: inline-block;
-  font-size: 0.75rem;
-  font-weight: bold;
-  color: #a15c00;
-  background: #ffe4b3;
-  border-radius: 3px;
-  padding: 0.05rem 0.4rem;
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  background: var(--danger-bg);
+  color: var(--danger-text);
 }
 
-/* A plain horizontal range input, rotated with CSS to read as vertical.
-   Avoids browser-specific vertical-slider APIs (Firefox's orient="vertical",
-   WebKit's -webkit-appearance: slider-vertical) so dragging keeps working
-   anywhere basic CSS transforms do. */
-.fill-meter {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.25rem;
+/* ---------- simple list rows (locations/tags manage pages) ---------- */
+.manage-add { display: flex; gap: 6px; margin-bottom: 12px; }
+.manage-add input {
+  flex: 1; font-size: 16px; padding: 9px 10px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
 }
-.fill-meter-track {
-  position: relative;
-  width: 32px;
-  height: 90px;
+.manage-add button {
+  background: var(--accent); color: var(--accent-ink); border: none;
+  border-radius: 10px; padding: 0 16px; font-weight: 700; cursor: pointer;
 }
-.fill-meter input[type="range"] {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 80px;
-  height: 24px;
-  margin: 0;
-  transform: translate(-50%, -50%) rotate(-90deg);
+.manage-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 12px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; font-size: 0.88rem;
 }
-.fill-meter .fill-label {
-  font-size: 0.8rem;
-  color: #555;
-}
+.manage-row + .manage-row { margin-top: 8px; }
+.manage-count { color: var(--muted); font-size: 0.74rem; }
 
-@media (max-width: 600px) {
-  table, thead, tbody, th, td, tr { display: block; }
-  thead { display: none; }
-  tr { margin-bottom: 0.75rem; border: 1px solid #ccc; }
-  td { border: none; border-bottom: 1px solid #eee; }
-  td::before {
-    content: attr(data-label);
-    font-weight: bold;
-    display: inline-block;
-    width: 100px;
+/* ---------- At a Glance filter (simple select bar) ---------- */
+.filters {
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px;
+}
+.filters select {
+  font: inherit; font-size: 16px; padding: 7px 9px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+}
+.filters label { font-size: 0.82rem; color: var(--muted); }
+
+/* ---------- iPad+/desktop: add-item panel sits beside the list, not below it ---------- */
+@media (min-width: 720px) {
+  .add-shell.with-panel {
+    display: flex;
+    align-items: flex-start;
+    gap: 20px;
   }
+  .add-shell.with-panel .list-column { flex: 1; min-width: 0; }
+  .add-shell.with-panel .bottombar {
+    position: static; background: none; border: none; box-shadow: none;
+    padding: 0 0 12px;
+  }
+  .add-shell.with-panel .bottombar #openSheetBtn { display: none; }
+  .add-shell.with-panel .sheet {
+    position: static;
+    flex: 0 0 300px;
+    width: auto;
+    max-width: none;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    box-shadow: none;
+    display: block !important;
+  }
+  body:has(.bottombar) { padding-bottom: 32px; }
 }

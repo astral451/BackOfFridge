@@ -46,9 +46,9 @@
 
   function expiresText(item) {
     var d = daysUntil(item.expiration_date);
-    if (d === null) return '—';
+    if (d === null) return null;
     if (d < 0) return Math.abs(d) + (Math.abs(d) === 1 ? ' day ago' : ' days ago');
-    if (d === 0) return 'today';
+    if (d === 0) return 'expires today';
     return 'in ' + d + (d === 1 ? ' day' : ' days');
   }
 
@@ -58,13 +58,6 @@
     if (d < 0) return 'expired';
     if (d <= 3) return 'expiring-soon';
     return '';
-  }
-
-  function countText(item) {
-    if (item.tracking_mode === 'fill_level') {
-      return (item.fill_percent != null ? item.fill_percent : '?') + '%';
-    }
-    return item.quantity + (item.unit ? ' ' + item.unit : '');
   }
 
   // Quick +/- for the common "used/added one" case, with no prompt - the
@@ -102,67 +95,133 @@
     }
   }
 
-  function buildQtyAdjustButtons(item) {
+  // Same fixed-width stepper as the main inventory page - fill-level items
+  // get a percentage track stacked below the button row instead of beside
+  // it, so every row's buttons line up in the same column.
+  function buildStepper(item) {
     var wrap = document.createElement('div');
-    wrap.className = 'qty-adjust';
+    wrap.className = 'stepper-wrap';
+
+    var stepper = document.createElement('div');
+    stepper.className = 'stepper';
 
     var minusBtn = document.createElement('button');
     minusBtn.type = 'button';
     minusBtn.textContent = '−';
-    minusBtn.className = 'small';
     minusBtn.title = item.tracking_mode === 'fill_level' ? '-10%' : '-1';
     minusBtn.addEventListener('click', function () { quickAdjust(item, -1); });
+
+    var qtyVal = document.createElement('span');
+    qtyVal.className = 'qty-val';
+    qtyVal.textContent = item.tracking_mode === 'fill_level'
+      ? (item.fill_percent != null ? item.fill_percent : 100) + '%'
+      : item.quantity + (item.unit ? ' ' + item.unit : '');
 
     var plusBtn = document.createElement('button');
     plusBtn.type = 'button';
     plusBtn.textContent = '+';
-    plusBtn.className = 'small';
     plusBtn.title = item.tracking_mode === 'fill_level' ? '+10%' : '+1';
     plusBtn.addEventListener('click', function () { quickAdjust(item, 1); });
 
-    wrap.appendChild(minusBtn);
-    wrap.appendChild(plusBtn);
+    stepper.appendChild(minusBtn);
+    stepper.appendChild(qtyVal);
+    stepper.appendChild(plusBtn);
+    wrap.appendChild(stepper);
+
+    if (item.tracking_mode === 'fill_level') {
+      var track = document.createElement('div');
+      track.className = 'fill-track';
+      var bar = document.createElement('div');
+      bar.className = 'fill-bar';
+      bar.style.width = (item.fill_percent != null ? item.fill_percent : 100) + '%';
+      track.appendChild(bar);
+      wrap.appendChild(track);
+    }
+
     return wrap;
   }
 
+  function buildItemRow(item) {
+    var row = document.createElement('div');
+    row.className = 'item-row ' + rowClass(item);
+
+    var main = document.createElement('div');
+    main.className = 'row-main';
+
+    var nameLine = document.createElement('div');
+    nameLine.className = 'row-name';
+    var nameSpan = document.createElement('span');
+    nameSpan.textContent = item.name;
+    nameLine.appendChild(nameSpan);
+    if (item.low_stock) {
+      var lowBadge = document.createElement('span');
+      lowBadge.className = 'badge low';
+      lowBadge.textContent = 'Low stock';
+      nameLine.appendChild(lowBadge);
+    }
+    if (rowClass(item) === 'expiring-soon') {
+      var soonBadge = document.createElement('span');
+      soonBadge.className = 'badge soon';
+      soonBadge.textContent = 'Expiring';
+      nameLine.appendChild(soonBadge);
+    }
+    main.appendChild(nameLine);
+
+    var meta = document.createElement('div');
+    meta.className = 'row-meta';
+    meta.textContent = expiresText(item) || '—';
+    main.appendChild(meta);
+
+    row.appendChild(main);
+    row.appendChild(buildStepper(item));
+    return row;
+  }
+
+  var collapsedGroups = {};
+
   function renderItems(items) {
-    var body = document.getElementById('glanceBody');
-    body.innerHTML = '';
+    var container = document.getElementById('itemGroups');
+    container.innerHTML = '';
+
+    var byLoc = {};
     items.forEach(function (item) {
-      var tr = document.createElement('tr');
-      tr.className = rowClass(item);
+      var key = item.location || '(no location)';
+      (byLoc[key] = byLoc[key] || []).push(item);
+    });
 
-      var nameTd = document.createElement('td');
-      nameTd.setAttribute('data-label', 'Name');
-      nameTd.textContent = item.name;
-      if (item.low_stock) {
-        var badge = document.createElement('span');
-        badge.className = 'low-stock-badge';
-        badge.textContent = 'Low stock';
-        nameTd.appendChild(document.createTextNode(' '));
-        nameTd.appendChild(badge);
-      }
-      tr.appendChild(nameTd);
+    Object.keys(byLoc).sort(function (a, b) { return a.localeCompare(b); }).forEach(function (loc) {
+      var group = document.createElement('div');
+      group.className = 'group';
 
-      var locationTd = document.createElement('td');
-      locationTd.setAttribute('data-label', 'Location');
-      locationTd.textContent = item.location;
-      tr.appendChild(locationTd);
+      var head = document.createElement('button');
+      head.type = 'button';
+      head.className = 'group-head' + (collapsedGroups[loc] ? ' collapsed' : '');
 
-      var expiresTd = document.createElement('td');
-      expiresTd.setAttribute('data-label', 'Expires');
-      expiresTd.textContent = expiresText(item);
-      tr.appendChild(expiresTd);
+      var labelSpan = document.createElement('span');
+      labelSpan.textContent = loc.toUpperCase() + ' (' + byLoc[loc].length + ')';
+      var chev = document.createElement('span');
+      chev.className = 'chev';
+      chev.textContent = '▾';
+      head.appendChild(labelSpan);
+      head.appendChild(chev);
 
-      var countTd = document.createElement('td');
-      countTd.setAttribute('data-label', 'Count');
-      var countSpan = document.createElement('span');
-      countSpan.textContent = countText(item);
-      countTd.appendChild(countSpan);
-      countTd.appendChild(buildQtyAdjustButtons(item));
-      tr.appendChild(countTd);
+      var rows = document.createElement('div');
+      rows.className = 'rows';
+      rows.hidden = !!collapsedGroups[loc];
 
-      body.appendChild(tr);
+      head.addEventListener('click', function () {
+        collapsedGroups[loc] = !collapsedGroups[loc];
+        head.classList.toggle('collapsed', collapsedGroups[loc]);
+        rows.hidden = collapsedGroups[loc];
+      });
+
+      byLoc[loc].forEach(function (item) {
+        rows.appendChild(buildItemRow(item));
+      });
+
+      group.appendChild(head);
+      group.appendChild(rows);
+      container.appendChild(group);
     });
   }
 

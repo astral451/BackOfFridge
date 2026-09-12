@@ -18,67 +18,74 @@
   </header>
 
   <main id="app">
-    <section class="add-form">
-      <h2>Quick add</h2>
-      <form id="quickAddForm">
-        <input type="text" id="quickAddInput" placeholder="e.g. milk, 1 gallon, fridge, dairy (tap the mic on your keyboard to dictate)">
-        <button type="submit">Fill in form &darr;</button>
-      </form>
-    </section>
+    <div class="chip-row" id="statusChips">
+      <button class="chip" data-filter="all" type="button">All</button>
+      <button class="chip active" data-filter="active" type="button">Active</button>
+      <button class="chip" data-filter="soon" type="button">Expiring soon</button>
+      <button class="chip" data-filter="low" type="button">Low stock</button>
+    </div>
 
-    <section class="add-form">
-      <h2>Log a purchase</h2>
-      <form id="itemForm">
-        <input type="text" id="f-name" placeholder="Item name" required>
-        <select id="f-category">
-          <option value="perishable">Perishable</option>
-          <option value="nonperishable">Non-perishable</option>
-        </select>
-        <select id="f-location-select">
-          <option value="">Select location...</option>
-          <option value="__new__">+ Add new location...</option>
-        </select>
-        <input type="text" id="f-location-new" placeholder="New location name" class="hidden">
-        <select id="f-tag-select">
-          <option value="">Select tag...</option>
-          <option value="__new__">+ Add new tag...</option>
-        </select>
-        <input type="text" id="f-tag-new" placeholder="New tag name" class="hidden">
-        <input type="number" id="f-quantity" placeholder="Qty" step="any" value="1">
-        <input type="text" id="f-unit" placeholder="Unit (oz, lbs, count...)">
-        <label>Purchased <input type="date" id="f-purchase"></label>
-        <label>Expires <input type="date" id="f-expiration"></label>
-        <input type="text" id="f-notes" placeholder="Notes">
-        <button type="submit">Add item</button>
-      </form>
-    </section>
-
-    <section class="filters">
-      <label><input type="checkbox" id="filterActiveOnly" checked> Active only</label>
-      <label>Location: <select id="filterLocation"><option value="">All</option></select></label>
-      <label>Tag: <select id="filterTag"><option value="">All</option></select></label>
-      <input type="text" id="searchBox" placeholder="Search...">
-      <label>Sort:
+    <button class="disclosure-toggle" type="button" data-toggle="filterPanel">Filter &amp; sort ▾</button>
+    <div class="filter-panel" hidden id="filterPanel">
+      <label>Location <select id="filterLocation"><option value="">All</option></select></label>
+      <label>Tag <select id="filterTag"><option value="">All</option></select></label>
+      <label>Search <input type="text" id="searchBox" placeholder="Search..."></label>
+      <label>Sort
         <select id="sortBy">
           <option value="">Default</option>
           <option value="recent">Recently added</option>
           <option value="name">Name</option>
         </select>
       </label>
-      <button id="refreshBtn">Refresh</button>
-    </section>
+    </div>
 
-    <section>
-      <table id="itemsTable">
-        <thead>
-          <tr>
-            <th>Name</th><th>Category</th><th>Location</th><th>Tag</th><th>Qty</th>
-            <th>Purchased</th><th>Expires</th><th>Status</th><th>Actions</th>
-          </tr>
-        </thead>
-        <tbody id="itemsBody"></tbody>
-      </table>
-    </section>
+    <div class="add-shell with-panel" id="addShell">
+      <div class="list-column">
+        <div class="bottombar">
+          <form id="quickAddForm">
+            <input type="text" id="quickAddInput" placeholder="Quick add… milk, 1 gallon, fridge, dairy (tap the mic to dictate)">
+          </form>
+          <button type="button" id="openSheetBtn" aria-label="Add item">+</button>
+        </div>
+
+        <div id="itemGroups"></div>
+      </div>
+
+      <div class="sheet" id="itemSheet" hidden>
+        <button class="sheet-close" type="button" id="closeSheetBtn">✕</button>
+        <h2>Log a purchase</h2>
+        <form id="itemForm">
+          <div class="form-grid compact">
+            <input type="text" id="f-name" placeholder="Item name" required class="full">
+            <input type="number" id="f-quantity" placeholder="Qty" step="any" value="1">
+            <input type="text" id="f-unit" placeholder="Unit (oz, lbs, count...)">
+            <select id="f-location-select" class="full">
+              <option value="">Select location...</option>
+              <option value="__new__">+ Add new location...</option>
+            </select>
+            <input type="text" id="f-location-new" placeholder="New location name" class="hidden full">
+          </div>
+
+          <button class="disclosure-toggle" type="button" data-toggle="moreFields">More fields ▾</button>
+          <div class="form-grid" hidden id="moreFields">
+            <select id="f-category">
+              <option value="perishable">Perishable</option>
+              <option value="nonperishable">Non-perishable</option>
+            </select>
+            <select id="f-tag-select">
+              <option value="">Select tag...</option>
+              <option value="__new__">+ Add new tag...</option>
+            </select>
+            <input type="text" id="f-tag-new" placeholder="New tag name" class="hidden full">
+            <label class="full">Purchased <input type="date" id="f-purchase"></label>
+            <label class="full">Expires <input type="date" id="f-expiration"></label>
+            <input type="text" id="f-notes" placeholder="Notes" class="full">
+          </div>
+
+          <button type="submit" class="save-btn">Add item</button>
+        </form>
+      </div>
+    </div>
   </main>
 
   <script src="app.js"></script>

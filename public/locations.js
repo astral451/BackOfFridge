@@ -38,23 +38,22 @@
   });
 
   function renderLocations(locations) {
-    var body = document.getElementById('locationsBody');
-    body.innerHTML = '';
+    var list = document.getElementById('locationsList');
+    list.innerHTML = '';
     locations.forEach(function (loc) {
-      var tr = document.createElement('tr');
+      var row = document.createElement('div');
+      row.className = 'manage-row';
 
-      var nameTd = document.createElement('td');
-      nameTd.setAttribute('data-label', 'Location');
-      nameTd.textContent = loc.name;
-      tr.appendChild(nameTd);
+      var info = document.createElement('div');
+      var nameDiv = document.createElement('div');
+      nameDiv.textContent = loc.name;
+      var countDiv = document.createElement('div');
+      countDiv.className = 'manage-count';
+      countDiv.textContent = loc.itemCount + ' item' + (loc.itemCount === 1 ? '' : 's');
+      info.appendChild(nameDiv);
+      info.appendChild(countDiv);
+      row.appendChild(info);
 
-      var countTd = document.createElement('td');
-      countTd.setAttribute('data-label', 'Items');
-      countTd.textContent = loc.itemCount;
-      tr.appendChild(countTd);
-
-      var actionsTd = document.createElement('td');
-      actionsTd.setAttribute('data-label', 'Actions');
       var delBtn = document.createElement('button');
       delBtn.textContent = 'Delete';
       delBtn.className = 'small';
@@ -64,10 +63,9 @@
           .then(refresh)
           .catch(function (err) { alert(err.message); });
       });
-      actionsTd.appendChild(delBtn);
-      tr.appendChild(actionsTd);
+      row.appendChild(delBtn);
 
-      body.appendChild(tr);
+      list.appendChild(row);
     });
   }
 

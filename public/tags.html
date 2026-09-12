@@ -15,22 +15,12 @@
   </header>
 
   <main id="app">
-    <section class="add-form">
-      <h2>Add a tag</h2>
-      <form id="tagForm">
-        <input type="text" id="t-name" placeholder="New tag name" required>
-        <button type="submit">+ Add</button>
-      </form>
-    </section>
+    <form id="tagForm" class="manage-add">
+      <input type="text" id="t-name" placeholder="New tag name" required>
+      <button type="submit">+ Add</button>
+    </form>
 
-    <section>
-      <table id="tagsTable">
-        <thead>
-          <tr><th>Tag</th><th>Items</th><th>Actions</th></tr>
-        </thead>
-        <tbody id="tagsBody"></tbody>
-      </table>
-    </section>
+    <div id="tagsList"></div>
   </main>
 
   <script src="tags.js"></script>

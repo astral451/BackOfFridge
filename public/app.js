@@ -62,11 +62,22 @@
     return { quantity: qty };
   }
 
+  function openSheet() {
+    document.getElementById('itemSheet').hidden = false;
+  }
+  function closeSheet() {
+    document.getElementById('itemSheet').hidden = true;
+  }
+  function expandMoreFields() {
+    document.getElementById('moreFields').hidden = false;
+  }
+
   // Pre-fills the purchase form from an existing item, so buying more of
   // something already tracked doesn't mean retyping name/category/location/unit.
   // Quantity, purchase date, and expiration are left for the user since those
   // typically differ on a new purchase.
   function fillFormFromItem(item) {
+    openSheet();
     document.getElementById('f-name').value = item.name;
     document.getElementById('f-category').value = item.category;
     document.getElementById('f-location-select').value = item.location;
@@ -78,7 +89,8 @@
     document.getElementById('f-purchase').value = new Date().toISOString().slice(0, 10);
     document.getElementById('f-expiration').value = '';
     document.getElementById('f-notes').value = '';
-    document.querySelector('.add-form').scrollIntoView({ behavior: 'smooth' });
+    expandMoreFields();
+    document.getElementById('itemSheet').scrollIntoView({ behavior: 'smooth' });
     document.getElementById('f-expiration').focus();
   }
 
@@ -404,11 +416,14 @@
     return result;
   }
 
-  // Pre-fills the purchase form from a parsed quick-add line and scrolls to
-  // it for review - mirrors fillFormFromItem's "pre-fill, don't submit"
+  // Pre-fills the purchase form from a parsed quick-add line and opens the
+  // sheet for review - mirrors fillFormFromItem's "pre-fill, don't submit"
   // behavior, but only touches fields the parser actually found something
-  // for, leaving the rest (category, etc.) as the user last left them.
+  // for, leaving the rest as the user last left them. Auto-expands "More
+  // fields" whenever the parser populated something living in that section,
+  // so a parsed tag/date/note isn't silently hidden from view.
   function fillFormFromQuickAdd(parsed) {
+    openSheet();
     document.getElementById('f-name').value = parsed.name;
     if (parsed.quantity !== null) document.getElementById('f-quantity').value = parsed.quantity;
     if (parsed.unit) document.getElementById('f-unit').value = parsed.unit;
@@ -416,31 +431,34 @@
       document.getElementById('f-location-select').value = parsed.location;
       document.getElementById('f-location-new').classList.add('hidden');
     }
+    var touchedMoreFields = false;
     if (parsed.tag) {
       document.getElementById('f-tag-select').value = parsed.tag;
       document.getElementById('f-tag-new').classList.add('hidden');
+      touchedMoreFields = true;
     }
-    if (parsed.expiration) document.getElementById('f-expiration').value = parsed.expiration;
-    if (parsed.notes) document.getElementById('f-notes').value = parsed.notes;
+    if (parsed.expiration) {
+      document.getElementById('f-expiration').value = parsed.expiration;
+      touchedMoreFields = true;
+    }
+    if (parsed.notes) {
+      document.getElementById('f-notes').value = parsed.notes;
+      touchedMoreFields = true;
+    }
+    if (touchedMoreFields) expandMoreFields();
     document.getElementById('f-name').scrollIntoView({ behavior: 'smooth', block: 'center' });
     document.getElementById('f-name').focus();
   }
 
-  // Replaces the whole row with a single wide cell holding a vertical,
-  // one-row-per-field grid covering every editable field - name, category,
-  // location, tag, quantity/unit (or fill %), purchase/expiration dates,
-  // and notes - reusing the same <select>s built for the purchase form
-  // rather than inventing new controls. Folds in what used to be the
-  // separate "Edit dates" prompt sequence, since dates are just two more
-  // rows here. Cancel/refresh discards unsaved changes and redraws the row
-  // normally, same pattern as the location-only editor this replaces.
-  function startFullFieldEdit(item, tr) {
-    var colCount = tr.children.length;
-    tr.innerHTML = '';
-
-    var td = document.createElement('td');
-    td.colSpan = colCount;
-    td.className = 'full-edit-cell';
+  // Replaces the row's contents with a vertical, one-row-per-field grid
+  // covering every editable field - name, category, location, tag,
+  // quantity/unit (or fill %), purchase/expiration dates, and notes -
+  // reusing the same <select>s built for the purchase form rather than
+  // inventing new controls. Cancel/refresh discards unsaved changes and
+  // redraws the row normally.
+  function startFullFieldEdit(item, row) {
+    row.innerHTML = '';
+    row.classList.add('full-edit-cell');
 
     var grid = document.createElement('div');
     grid.className = 'full-edit-grid';
@@ -517,7 +535,7 @@
     notesInput.value = item.notes || '';
     row('Notes', notesInput);
 
-    td.appendChild(grid);
+    row.appendChild(grid);
 
     var buttons = document.createElement('div');
     buttons.className = 'full-edit-buttons';
@@ -568,8 +586,7 @@
 
     buttons.appendChild(saveBtn);
     buttons.appendChild(cancelBtn);
-    td.appendChild(buttons);
-    tr.appendChild(td);
+    row.appendChild(buttons);
 
     Promise.all([apiFetch('/locations'), apiFetch('/tags')]).then(function (results) {
       var locations = results[0];
@@ -595,47 +612,6 @@
       tagSelect.value = item.tag || '';
       tagSelect.disabled = false;
     }).catch(function (err) { alert(err.message); });
-  }
-
-  // Builds a vertical fill-level meter: a normal horizontal <input
-  // type="range"> rotated with CSS (not the vendor-specific "orient" or
-  // "-webkit-appearance: slider-vertical" APIs, which only work in some
-  // browsers) so dragging works anywhere plain CSS transforms do. Updates a
-  // percent label live while dragging (no network calls); only PATCHes on
-  // release, so a slow connection isn't hit on every pixel of drag.
-  function buildFillMeter(item) {
-    var wrap = document.createElement('div');
-    wrap.className = 'fill-meter';
-
-    var track = document.createElement('div');
-    track.className = 'fill-meter-track';
-
-    var slider = document.createElement('input');
-    slider.type = 'range';
-    slider.min = 0;
-    slider.max = 100;
-    slider.value = item.fill_percent != null ? item.fill_percent : 100;
-
-    var label = document.createElement('span');
-    label.className = 'fill-label';
-    label.textContent = slider.value + '%';
-
-    slider.addEventListener('input', function () {
-      label.textContent = slider.value + '%';
-    });
-    slider.addEventListener('change', function () {
-      apiFetch('/items/' + item.id, {
-        method: 'PATCH',
-        body: JSON.stringify({ fill_percent: parseFloat(slider.value) }),
-      })
-        .then(refresh)
-        .catch(function (err) { alert(err.message); });
-    });
-
-    track.appendChild(slider);
-    wrap.appendChild(track);
-    wrap.appendChild(label);
-    return wrap;
   }
 
   // Quick +/- for the common "used/added one" case, with no prompt. Count-
@@ -673,27 +649,56 @@
     }
   }
 
-  // Builds the -/+ button pair for the Qty cell (see quickAdjust above).
-  function buildQtyAdjustButtons(item) {
+  // Builds the quantity display + -/+ stepper for an item row. Fill-level
+  // items get a percentage track stacked below the button row rather than
+  // squeezed beside it, so the buttons stay the same fixed width (and line
+  // up in the same column) whether the row is fill- or count-tracked.
+  function buildStepper(item) {
     var wrap = document.createElement('div');
-    wrap.className = 'qty-adjust';
+    wrap.className = 'stepper-wrap';
+
+    var stepper = document.createElement('div');
+    stepper.className = 'stepper';
 
     var minusBtn = document.createElement('button');
     minusBtn.type = 'button';
     minusBtn.textContent = '−';
-    minusBtn.className = 'small';
     minusBtn.title = item.tracking_mode === 'fill_level' ? '-10%' : '-1';
-    minusBtn.addEventListener('click', function () { quickAdjust(item, -1); });
+
+    var qtyVal = document.createElement('span');
+    qtyVal.className = 'qty-val';
+    qtyVal.textContent = item.tracking_mode === 'fill_level'
+      ? (item.fill_percent != null ? item.fill_percent : 100) + '%'
+      : item.quantity + (item.unit ? ' ' + item.unit : '');
 
     var plusBtn = document.createElement('button');
     plusBtn.type = 'button';
     plusBtn.textContent = '+';
-    plusBtn.className = 'small';
     plusBtn.title = item.tracking_mode === 'fill_level' ? '+10%' : '+1';
-    plusBtn.addEventListener('click', function () { quickAdjust(item, 1); });
 
-    wrap.appendChild(minusBtn);
-    wrap.appendChild(plusBtn);
+    if (item.status === 'active') {
+      minusBtn.addEventListener('click', function () { quickAdjust(item, -1); });
+      plusBtn.addEventListener('click', function () { quickAdjust(item, 1); });
+    } else {
+      minusBtn.disabled = true;
+      plusBtn.disabled = true;
+    }
+
+    stepper.appendChild(minusBtn);
+    stepper.appendChild(qtyVal);
+    stepper.appendChild(plusBtn);
+    wrap.appendChild(stepper);
+
+    if (item.tracking_mode === 'fill_level') {
+      var track = document.createElement('div');
+      track.className = 'fill-track';
+      var bar = document.createElement('div');
+      bar.className = 'fill-bar';
+      bar.style.width = (item.fill_percent != null ? item.fill_percent : 100) + '%';
+      track.appendChild(bar);
+      wrap.appendChild(track);
+    }
+
     return wrap;
   }
 
@@ -706,148 +711,213 @@
     return '';
   }
 
-  function renderItems(items) {
-    var body = document.getElementById('itemsBody');
-    body.innerHTML = '';
-    items.forEach(function (item) {
-      var tr = document.createElement('tr');
-      tr.className = rowClass(item);
+  // Closes any open row overflow menu - called before opening a new one,
+  // and on any outside click.
+  function closeOverflowMenus() {
+    document.querySelectorAll('.overflow-menu').forEach(function (m) { m.remove(); });
+  }
+  document.addEventListener('click', function (e) {
+    if (e.target.closest('.overflow-btn') || e.target.closest('.overflow-menu')) return;
+    closeOverflowMenus();
+  });
 
-      function cell(label, text) {
-        var td = document.createElement('td');
-        td.setAttribute('data-label', label);
-        td.textContent = text || '';
-        tr.appendChild(td);
-      }
+  // Builds the "⋯" menu of secondary actions for one row - everything that
+  // used to be a row of buttons (throw out/consume/undo/edit/track mode/
+  // buy again/delete), now tucked away so the row itself stays compact.
+  function buildOverflowMenu(item, row) {
+    var menu = document.createElement('div');
+    menu.className = 'overflow-menu';
 
-      var nameTd = document.createElement('td');
-      nameTd.setAttribute('data-label', 'Name');
-      nameTd.textContent = item.name;
-      if (item.low_stock) {
-        var badge = document.createElement('span');
-        badge.className = 'low-stock-badge';
-        badge.textContent = 'Low stock';
-        nameTd.appendChild(document.createTextNode(' '));
-        nameTd.appendChild(badge);
-      }
-      tr.appendChild(nameTd);
-
-      cell('Category', item.category);
-      cell('Location', item.location);
-      cell('Tag', item.tag);
-
-      var qtyTd = document.createElement('td');
-      qtyTd.setAttribute('data-label', 'Qty');
-      if (item.tracking_mode === 'fill_level') {
-        qtyTd.appendChild(buildFillMeter(item));
-      } else {
-        var qtyText = document.createElement('span');
-        qtyText.textContent = item.quantity + ' ' + (item.unit || '');
-        qtyTd.appendChild(qtyText);
-      }
-      if (item.status === 'active') {
-        qtyTd.appendChild(buildQtyAdjustButtons(item));
-      }
-      tr.appendChild(qtyTd);
-
-      cell('Purchased', item.purchase_date);
-      cell('Expires', item.expiration_date);
-      cell('Status', item.status);
-
-      var actionsTd = document.createElement('td');
-      actionsTd.setAttribute('data-label', 'Actions');
-      if (item.status === 'active') {
-        var throwBtn = document.createElement('button');
-        throwBtn.textContent = 'Throw out';
-        throwBtn.className = 'small';
-        throwBtn.addEventListener('click', function () {
-          var body = promptQuantity(item, 'thrown out');
-          if (body === null) return;
-          apiFetch('/items/' + item.id + '/throw-out', { method: 'POST', body: JSON.stringify(body) })
-            .then(refresh)
-            .catch(function (err) { alert(err.message); });
-        });
-        var consumeBtn = document.createElement('button');
-        consumeBtn.textContent = 'Consumed';
-        consumeBtn.className = 'small';
-        consumeBtn.addEventListener('click', function () {
-          var body = promptQuantity(item, 'consumed');
-          if (body === null) return;
-          apiFetch('/items/' + item.id + '/consume', { method: 'POST', body: JSON.stringify(body) })
-            .then(refresh)
-            .catch(function (err) { alert(err.message); });
-        });
-        actionsTd.appendChild(throwBtn);
-        actionsTd.appendChild(consumeBtn);
-      }
-      if (item.prev_status) {
-        var undoBtn = document.createElement('button');
-        undoBtn.textContent = 'Undo';
-        undoBtn.className = 'small';
-        undoBtn.addEventListener('click', function () {
-          apiFetch('/items/' + item.id + '/undo', { method: 'POST' })
-            .then(refresh)
-            .catch(function (err) { alert(err.message); });
-        });
-        actionsTd.appendChild(undoBtn);
-      }
-      var editBtn = document.createElement('button');
-      editBtn.textContent = 'Edit';
-      editBtn.className = 'small';
-      editBtn.addEventListener('click', function () {
-        startFullFieldEdit(item, tr);
+    function addAction(label, handler) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = label;
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        closeOverflowMenus();
+        handler();
       });
-      actionsTd.appendChild(editBtn);
+      menu.appendChild(btn);
+    }
 
-      var modeBtn = document.createElement('button');
-      modeBtn.className = 'small';
-      if (item.tracking_mode === 'fill_level') {
-        modeBtn.textContent = 'Track by count';
-        modeBtn.addEventListener('click', function () {
-          apiFetch('/items/' + item.id, { method: 'PATCH', body: JSON.stringify({ tracking_mode: 'count' }) })
-            .then(refresh)
-            .catch(function (err) { alert(err.message); });
-        });
-      } else {
-        modeBtn.textContent = 'Track by fill level';
-        modeBtn.addEventListener('click', function () {
-          var input = window.prompt('Roughly how full is "' + item.name + '" right now? (0-100%)', '100');
-          if (input === null) return;
-          var pct = parseFloat(input);
-          if (!(pct >= 0 && pct <= 100)) {
-            alert('Enter a number between 0 and 100.');
-            return;
-          }
-          apiFetch('/items/' + item.id, {
-            method: 'PATCH',
-            body: JSON.stringify({ tracking_mode: 'fill_level', fill_percent: pct }),
-          })
-            .then(refresh)
-            .catch(function (err) { alert(err.message); });
-        });
-      }
-      actionsTd.appendChild(modeBtn);
-
-      var buyAgainBtn = document.createElement('button');
-      buyAgainBtn.textContent = 'Buy again';
-      buyAgainBtn.className = 'small';
-      buyAgainBtn.addEventListener('click', function () {
-        fillFormFromItem(item);
+    if (item.status === 'active') {
+      addAction('Throw out', function () {
+        var body = promptQuantity(item, 'thrown out');
+        if (body === null) return;
+        apiFetch('/items/' + item.id + '/throw-out', { method: 'POST', body: JSON.stringify(body) })
+          .then(refresh)
+          .catch(function (err) { alert(err.message); });
       });
-      actionsTd.appendChild(buyAgainBtn);
-
-      var delBtn = document.createElement('button');
-      delBtn.textContent = 'Delete';
-      delBtn.className = 'small';
-      delBtn.addEventListener('click', function () {
-        if (confirm('Delete "' + item.name + '"?')) {
-          apiFetch('/items/' + item.id, { method: 'DELETE' }).then(refresh);
+      addAction('Consumed', function () {
+        var body = promptQuantity(item, 'consumed');
+        if (body === null) return;
+        apiFetch('/items/' + item.id + '/consume', { method: 'POST', body: JSON.stringify(body) })
+          .then(refresh)
+          .catch(function (err) { alert(err.message); });
+      });
+    }
+    if (item.prev_status) {
+      addAction('Undo', function () {
+        apiFetch('/items/' + item.id + '/undo', { method: 'POST' })
+          .then(refresh)
+          .catch(function (err) { alert(err.message); });
+      });
+    }
+    addAction('Edit', function () {
+      startFullFieldEdit(item, row);
+    });
+    if (item.tracking_mode === 'fill_level') {
+      addAction('Track by count', function () {
+        apiFetch('/items/' + item.id, { method: 'PATCH', body: JSON.stringify({ tracking_mode: 'count' }) })
+          .then(refresh)
+          .catch(function (err) { alert(err.message); });
+      });
+    } else {
+      addAction('Track by fill level', function () {
+        var input = window.prompt('Roughly how full is "' + item.name + '" right now? (0-100%)', '100');
+        if (input === null) return;
+        var pct = parseFloat(input);
+        if (!(pct >= 0 && pct <= 100)) {
+          alert('Enter a number between 0 and 100.');
+          return;
         }
+        apiFetch('/items/' + item.id, {
+          method: 'PATCH',
+          body: JSON.stringify({ tracking_mode: 'fill_level', fill_percent: pct }),
+        })
+          .then(refresh)
+          .catch(function (err) { alert(err.message); });
       });
-      actionsTd.appendChild(delBtn);
-      tr.appendChild(actionsTd);
+    }
+    addAction('Buy again', function () { fillFormFromItem(item); });
+    addAction('Delete', function () {
+      if (confirm('Delete "' + item.name + '"?')) {
+        apiFetch('/items/' + item.id, { method: 'DELETE' }).then(refresh);
+      }
+    });
 
-      body.appendChild(tr);
+    row.appendChild(menu);
+    return menu;
+  }
+
+  // Renders the relative-days expiry text used in a row's meta line, for
+  // active items with an expiration date.
+  function expiresText(item) {
+    var d = daysUntil(item.expiration_date);
+    if (d === null) return null;
+    if (d < 0) return Math.abs(d) + (Math.abs(d) === 1 ? ' day ago' : ' days ago');
+    if (d === 0) return 'expires today';
+    return 'in ' + d + (d === 1 ? ' day' : ' days');
+  }
+
+  function buildItemRow(item) {
+    var row = document.createElement('div');
+    row.className = 'item-row ' + rowClass(item);
+
+    var main = document.createElement('div');
+    main.className = 'row-main';
+
+    var nameLine = document.createElement('div');
+    nameLine.className = 'row-name';
+    var nameSpan = document.createElement('span');
+    nameSpan.textContent = item.name;
+    nameLine.appendChild(nameSpan);
+    if (item.low_stock) {
+      var lowBadge = document.createElement('span');
+      lowBadge.className = 'badge low';
+      lowBadge.textContent = 'Low stock';
+      nameLine.appendChild(lowBadge);
+    }
+    if (rowClass(item) === 'expiring-soon') {
+      var soonBadge = document.createElement('span');
+      soonBadge.className = 'badge soon';
+      soonBadge.textContent = 'Expiring';
+      nameLine.appendChild(soonBadge);
+    }
+    main.appendChild(nameLine);
+
+    var metaParts = [item.category];
+    if (item.tag) metaParts.push(item.tag);
+    if (item.status === 'active') {
+      var expText = expiresText(item);
+      if (expText) metaParts.push(expText);
+    } else {
+      metaParts.push(item.status);
+    }
+    var meta = document.createElement('div');
+    meta.className = 'row-meta';
+    meta.textContent = metaParts.join(' · ');
+    main.appendChild(meta);
+
+    row.appendChild(main);
+    row.appendChild(buildStepper(item));
+
+    var overflowBtn = document.createElement('button');
+    overflowBtn.type = 'button';
+    overflowBtn.className = 'overflow-btn';
+    overflowBtn.textContent = '⋯';
+    overflowBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var existing = row.querySelector('.overflow-menu');
+      if (existing) {
+        existing.remove();
+        return;
+      }
+      closeOverflowMenus();
+      buildOverflowMenu(item, row);
+    });
+    row.appendChild(overflowBtn);
+
+    return row;
+  }
+
+  // Persists which location groups are collapsed across re-renders (every
+  // action re-fetches and re-renders the whole list).
+  var collapsedGroups = {};
+
+  function renderItems(items) {
+    var container = document.getElementById('itemGroups');
+    container.innerHTML = '';
+
+    var byLoc = {};
+    items.forEach(function (item) {
+      var key = item.location || '(no location)';
+      (byLoc[key] = byLoc[key] || []).push(item);
+    });
+
+    Object.keys(byLoc).sort(function (a, b) { return a.localeCompare(b); }).forEach(function (loc) {
+      var group = document.createElement('div');
+      group.className = 'group';
+
+      var head = document.createElement('button');
+      head.type = 'button';
+      head.className = 'group-head' + (collapsedGroups[loc] ? ' collapsed' : '');
+
+      var labelSpan = document.createElement('span');
+      labelSpan.textContent = loc.toUpperCase() + ' (' + byLoc[loc].length + ')';
+      var chev = document.createElement('span');
+      chev.className = 'chev';
+      chev.textContent = '▾';
+      head.appendChild(labelSpan);
+      head.appendChild(chev);
+
+      var rows = document.createElement('div');
+      rows.className = 'rows';
+      rows.hidden = !!collapsedGroups[loc];
+
+      head.addEventListener('click', function () {
+        collapsedGroups[loc] = !collapsedGroups[loc];
+        head.classList.toggle('collapsed', collapsedGroups[loc]);
+        rows.hidden = collapsedGroups[loc];
+      });
+
+      byLoc[loc].forEach(function (item) {
+        rows.appendChild(buildItemRow(item));
+      });
+
+      group.appendChild(head);
+      group.appendChild(rows);
+      container.appendChild(group);
     });
   }
 
@@ -914,15 +984,27 @@
 
   var lastItems = [];
 
+  // Status chip state: all/active fetch from the server (see refresh());
+  // soon/low reuse the already-active-filtered set and post-filter on data
+  // already computed per item (rowClass/low_stock), no extra request needed.
+  var statusChip = 'active';
+
+  function matchesStatusChip(item) {
+    if (statusChip === 'soon') return rowClass(item) === 'expiring-soon';
+    if (statusChip === 'low') return !!item.low_stock;
+    return true;
+  }
+
   // Case-insensitive substring match across every field worth searching,
   // then a sort - both operate on the already-fetched item list client-side
   // rather than round-tripping to the server, since the full list is
   // already loaded for the status/location filters.
   function applyFiltersAndRender() {
+    var filtered = lastItems.filter(matchesStatusChip);
+
     var query = document.getElementById('searchBox').value.trim().toLowerCase();
-    var filtered = lastItems;
     if (query) {
-      filtered = lastItems.filter(function (item) {
+      filtered = filtered.filter(function (item) {
         return [item.name, item.location, item.category, item.tag, item.notes, item.unit, item.status]
           .some(function (field) { return field && field.toLowerCase().indexOf(query) !== -1; });
       });
@@ -940,7 +1022,7 @@
 
   function refresh() {
     var params = new URLSearchParams();
-    if (document.getElementById('filterActiveOnly').checked) {
+    if (statusChip !== 'all') {
       params.set('status', 'active');
     }
     var loc = document.getElementById('filterLocation').value;
@@ -1013,7 +1095,9 @@
       document.getElementById('f-category').value = 'perishable';
       document.getElementById('f-location-new').classList.add('hidden');
       document.getElementById('f-tag-new').classList.add('hidden');
+      document.getElementById('moreFields').hidden = true;
       setDefaultPurchaseDate();
+      closeSheet();
       refresh();
     }).catch(function (err) {
       alert(err.message);
@@ -1029,8 +1113,36 @@
     input.value = '';
   });
 
-  document.getElementById('refreshBtn').addEventListener('click', refresh);
-  document.getElementById('filterActiveOnly').addEventListener('change', refresh);
+  document.getElementById('openSheetBtn').addEventListener('click', function () {
+    document.getElementById('itemForm').reset();
+    document.getElementById('f-category').value = 'perishable';
+    document.getElementById('f-location-new').classList.add('hidden');
+    document.getElementById('f-tag-new').classList.add('hidden');
+    document.getElementById('moreFields').hidden = true;
+    setDefaultPurchaseDate();
+    openSheet();
+    document.getElementById('f-name').focus();
+  });
+  document.getElementById('closeSheetBtn').addEventListener('click', closeSheet);
+
+  // Generic disclosure toggles - "More fields" on the purchase form and
+  // "Filter & sort" above the list both just show/hide their target panel.
+  document.querySelectorAll('[data-toggle]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var target = document.getElementById(btn.getAttribute('data-toggle'));
+      if (target) target.hidden = !target.hidden;
+    });
+  });
+
+  document.querySelectorAll('#statusChips .chip').forEach(function (chip) {
+    chip.addEventListener('click', function () {
+      document.querySelectorAll('#statusChips .chip').forEach(function (c) { c.classList.remove('active'); });
+      chip.classList.add('active');
+      statusChip = chip.getAttribute('data-filter');
+      refresh();
+    });
+  });
+
   document.getElementById('filterLocation').addEventListener('change', refresh);
   document.getElementById('filterTag').addEventListener('change', refresh);
   document.getElementById('searchBox').addEventListener('input', applyFiltersAndRender);
