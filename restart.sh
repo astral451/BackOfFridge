@@ -19,6 +19,13 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 BACKUP_ROOT="data-backups"
 KEEP=10
 
+# Placeholder until real schema version tracking exists (a schema_migrations
+# table in the db, per the earlier discussion) - hardcoded for now so every
+# backup already carries a SCHEMA_VERSION file in the format the eventual
+# real system will use. Once that lands, replace this with something that
+# reads the actual applied version out of the database instead.
+SCHEMA_VERSION="unversioned"
+
 if [ ! -d data ]; then
   echo "No ./data folder found yet - nothing to back up (first run?)."
 else
@@ -29,8 +36,9 @@ else
   echo "Stopping container..."
   docker compose stop
 
-  echo "Backing up data/ -> $dest"
+  echo "Backing up data/ -> $dest (schema version: $SCHEMA_VERSION)"
   cp -r data "$dest"
+  echo "$SCHEMA_VERSION" > "$dest/SCHEMA_VERSION"
 
   # Keep only the most recent $KEEP backups so this doesn't grow unbounded
   # across repeated restarts.
