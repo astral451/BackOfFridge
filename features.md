@@ -142,14 +142,73 @@
   a deliberate small exception for one fast, low-risk action. A specific
   amount, or throwing out instead of consuming, still goes through the
   existing prompt/button flow.
-- Full-field edit view — replaces the old location/quantity-only inline
-  panel (and the separate "Edit dates" prompt sequence) with a vertical,
-  one-row-per-field grid covering every editable field (name, category,
-  location, tag, quantity/unit or fill %, purchase/expiration dates,
-  notes), reusing the same inputs already built for the purchase form.
-  Replaces the whole table row with one colspan'd cell (`startFullFieldEdit`
-  in `public/app.js`) rather than cramming every field into the narrow
-  actions column.
+- Full-field edit view — the overflow menu's "Edit" action opens the same
+  purchase-sheet form used to log a new item, pre-filled with every editable
+  field (name, category, location, tag, quantity/unit or a Fill % input
+  shown only for fill-tracked items, purchase/expiration dates, notes), and
+  submits a PATCH to the existing item instead of a POST. Replaced an
+  earlier row-based inline editor (`startFullFieldEdit`, one colspan'd table
+  cell) that predated the phone-first restyle's grouped-div item list and
+  had gone silently broken in translation (an inner helper function
+  accidentally shadowed the row-element parameter of the same name) — reusing
+  the existing purchase sheet instead of re-fixing a second bespoke editor
+  means there's only one form's worth of fields/validation to maintain.
+- Phone-first restyle ("Cold Storage") — a full visual and structural pass
+  built for a phone held in one hand first, on the `claude/phone-first-restyle`
+  branch. Items group by location into collapsible sections (`public/app.js`'s
+  `renderItems`, collapse state kept in a module-level `collapsedGroups`); a
+  fixed bottom bar carries quick-add and a "+" that opens a sliding sheet
+  (a permanent side panel at ≥720px instead) for the full purchase form;
+  every row gets one "⋯" overflow menu for its secondary actions (throw out,
+  consume, undo, edit, change tracking mode, buy again, delete) instead of a
+  wall of buttons; a uniform-width +/- stepper keeps count and fill-level
+  rows aligned, with the fill-percentage bar stacked below the buttons
+  rather than squeezed beside them. At ≥720px the purchase form also shows
+  every field at once instead of behind "More fields ▾", since there's room
+  for it there. Status chips (All/Active/Expiring soon/Low stock) replace
+  the old "active only" checkbox and satisfy what the Roadmap used to list
+  as a separate "Dedicated expiration view" — Expiring soon/Low stock
+  reuse data already computed per item, no new query needed. A
+  "Search, filter, sort ▾" disclosure holds the existing location/tag/
+  search/sort controls (search first, since it's the most-used one), with a
+  one-tap Reset button next to the toggle whenever any of them is active.
+  The quick-add "+" button also processes whatever's still sitting in the
+  quick-add box (dictation often leaves text there without a keyboard
+  Return press) instead of silently discarding it in favor of a blank form.
+- Light theme, auto-switching ("Pantry Fresh") — a warm cream, sage-green
+  light palette, now the default alongside the original dark "Cold Storage"
+  one. Every color already ran through CSS custom properties from the
+  restyle above, so adding a second theme meant only restructuring
+  `:root` in `public/styles.css`: light tokens as the default, dark tokens
+  moved under `@media (prefers-color-scheme: dark)` — the app follows the
+  browser/OS setting automatically.
+- Settings page (`public/settings.html`) — an Appearance control
+  (Auto/Light/Dark) overriding the OS theme per-browser, stored in
+  `localStorage` and applied by a small inline script at the top of every
+  page's `<head>` (before the stylesheet loads, so there's no flash of the
+  wrong theme). `styles.css` gains matching `:root[data-theme="dark"]` and
+  `:not([data-theme="light"])`-guarded override blocks so an explicit
+  choice wins over the OS setting in either direction. Built ahead of the
+  planned photo capture/recall feature specifically so that has a page to
+  land in later without needing its own settings infrastructure built at
+  the same time — no image-related UI shipped yet.
+- Automated restart + backup (`restart.sh`) — stops the container, backs up
+  the whole `data/` folder (not just `inventory.db` — WAL mode means recent
+  writes can still be sitting in a separate `-wal` file) into
+  `data-backups/<timestamp>`, pruned to the most recent 20, then `git pull`s
+  and rebuilds the Docker image only if the pull actually moved `HEAD`
+  (otherwise just restarts, keeping a no-op run fast). Refuses to pull over
+  an uncommitted local change rather than risking a mid-script merge
+  conflict. Each backup is tagged with a placeholder `SCHEMA_VERSION` file
+  (currently just `"unversioned"`), ready for the real schema-version
+  tracking system below once that exists.
+- Usage-history query tool (`common_sql_commands.sh`) — canned `sqlite3`
+  queries over the `item_events` table for "what's actually being used"
+  questions without hand-writing SQL each time: most-purchased items,
+  activity by user and event type, a recent-activity feed, and
+  consumed-vs-thrown-out counts. Run with no arguments to list the
+  available commands (works even without `sqlite3` installed or a database
+  present yet, checked before either of those).
 
 ## Roadmap
 
@@ -221,26 +280,24 @@ priority — a Low item isn't necessarily more worth doing than a High one.
   Now unblocked: `item_events` (shipped above) has a `purchased` event per
   purchase, so this is a `GROUP BY item_name` count over that table filtered
   to `event_type = 'purchased'`, rather than needing new tracking.
-- **Narrow-width layout: trim to the essentials** — on a constrained screen,
-  actively drop low-value fields instead of just reflowing everything.
-  Called out as non-critical at a glance: purchase date, category, and the
-  status column. What matters at a glance: is it expired or close to it,
-  and how much is left. This refines existing behavior rather than adding
-  responsiveness from scratch — `public/styles.css` already has a
-  `max-width: 600px` breakpoint that stacks the table into per-item cards,
-  but today that stacks *every* field (including the ones called out here
-  as unnecessary) rather than dropping any. Status is already conveyed
-  visually anyway via row color-coding (`rowClass` in `public/app.js`:
-  expired/expiring-soon/thrown_out/consumed) — dropping the redundant text
-  status column on narrow layouts loses no information, though it likely
-  needs a small legend since color alone isn't self-explanatory to a new
-  viewer of the page.
-- **Dedicated expiration view** — refined into two specific pages: an
-  **Expired** page and an **Expiring soon (< 3 days)** page, rather than one
-  general view. Both are filters over data already tracked (expiration_date +
-  status), so this is close to a pure UI addition — reuse the existing
-  items-list rendering with a fixed filter instead of the location/status
-  dropdowns.
+- **Narrow-width layout: trim to the essentials** — partially addressed by
+  the phone-first restyle (compact grouped rows, status chips, color-coded
+  expiry) but not finished: on the smallest screens, actively drop
+  low-value fields from each row rather than just keeping them small.
+  Purchase date and category are still shown on every row regardless of
+  width; what matters at a glance is whether something's expired or close
+  to it, and how much is left, both already conveyed by the row's
+  background tint and the stepper.
+- **Real schema-version tracking** — schema changes today are ad-hoc,
+  guarded `ALTER TABLE`/`CREATE TABLE IF NOT EXISTS` blocks checked at
+  startup in `server/src/db.js` (safe and idempotent, but no migrations
+  table, no ordered/named history, no way to tell which of the accumulated
+  migrations a given database file has already had applied). Planned
+  approach: a `schema_migrations` table (`version`, `applied_at`), the
+  existing ad-hoc blocks pulled out into numbered migration files, only
+  the ones not yet recorded run at startup. `restart.sh` already writes a
+  placeholder `SCHEMA_VERSION` file into every backup, ready to be swapped
+  for the real applied version once this exists.
 - **Full multi-family isolation** (separate households sharing one
   deployment, each with private data) — shelved, larger, only worth doing
   if this is ever actually hosted for more than one household. The
