@@ -136,7 +136,17 @@ Worth doing before any `git pull` + `docker compose up --build`, since new
 code sometimes adds tables/columns to the database on startup. None of the
 migrations so far delete or rewrite existing data (only `CREATE TABLE IF NOT
 EXISTS` / `ALTER TABLE ADD COLUMN`), but backing up first costs nothing and
-means a bad upgrade is always recoverable:
+means a bad upgrade is always recoverable. `./restart.sh` does this
+automatically (stop, copy `data/` into `data-backups/<timestamp>`, keep the
+last 10, start again — pass `--build` to also rebuild the image after a
+`git pull`):
+
+```bash
+./restart.sh          # backup + restart, no rebuild
+./restart.sh --build  # backup + rebuild + restart (after a git pull)
+```
+
+Or do it by hand:
 
 ```bash
 cd ~/apps/BackOfFridge   # or wherever you cloned it
