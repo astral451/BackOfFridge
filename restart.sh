@@ -17,7 +17,7 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
 BACKUP_ROOT="data-backups"
-KEEP=10
+KEEP=20
 
 # Placeholder until real schema version tracking exists (a schema_migrations
 # table in the db, per the earlier discussion) - hardcoded for now so every
