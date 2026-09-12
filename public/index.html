@@ -25,11 +25,14 @@
       <button class="chip" data-filter="low" type="button">Low stock</button>
     </div>
 
-    <button class="disclosure-toggle" type="button" data-toggle="filterPanel">Filter &amp; sort ▾</button>
+    <div class="filter-bar-row">
+      <button class="disclosure-toggle" type="button" data-toggle="filterPanel">Filter &amp; sort ▾</button>
+      <button class="reset-filters-btn" type="button" id="resetFiltersBtn" hidden>Reset</button>
+    </div>
     <div class="filter-panel" hidden id="filterPanel">
+      <label>Search <input type="text" id="searchBox" placeholder="Search..."></label>
       <label>Location <select id="filterLocation"><option value="">All</option></select></label>
       <label>Tag <select id="filterTag"><option value="">All</option></select></label>
-      <label>Search <input type="text" id="searchBox" placeholder="Search..."></label>
       <label>Sort
         <select id="sortBy">
           <option value="">Default</option>

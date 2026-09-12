@@ -935,6 +935,19 @@
     }
 
     renderItems(filtered);
+    updateResetFiltersVisibility();
+  }
+
+  // Shows the "Reset" button (next to the Filter & sort toggle, visible
+  // whether the panel is open or closed) whenever any of location/tag/
+  // search/sort is non-default, so there's always a one-tap way back to
+  // the unfiltered list without having to open the panel first.
+  function updateResetFiltersVisibility() {
+    var active = document.getElementById('filterLocation').value ||
+      document.getElementById('filterTag').value ||
+      document.getElementById('searchBox').value.trim() ||
+      document.getElementById('sortBy').value;
+    document.getElementById('resetFiltersBtn').hidden = !active;
   }
 
   function refresh() {
@@ -1081,6 +1094,14 @@
   document.getElementById('filterTag').addEventListener('change', refresh);
   document.getElementById('searchBox').addEventListener('input', applyFiltersAndRender);
   document.getElementById('sortBy').addEventListener('change', applyFiltersAndRender);
+
+  document.getElementById('resetFiltersBtn').addEventListener('click', function () {
+    document.getElementById('filterLocation').value = '';
+    document.getElementById('filterTag').value = '';
+    document.getElementById('searchBox').value = '';
+    document.getElementById('sortBy').value = '';
+    refresh();
+  });
 
   // Defaults the purchase date to today, since that's true for the large
   // majority of purchases logged - saves a tap/dictation on every add, and

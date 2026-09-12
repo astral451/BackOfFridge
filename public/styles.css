@@ -142,6 +142,23 @@ button.small:disabled { opacity: 0.4; cursor: not-allowed; }
 }
 .disclosure-toggle:hover { color: var(--text); }
 
+/* The Filter & sort toggle row - the toggle stays flexible so the Reset
+   button can sit at the right edge whether the panel is open or closed. */
+.filter-bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.filter-bar-row .disclosure-toggle { width: auto; flex: 1; margin-bottom: 0; }
+.reset-filters-btn {
+  flex: 0 0 auto;
+  background: none;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 4px 11px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.reset-filters-btn:hover { background: var(--accent); color: var(--accent-ink); }
+
 /* ---------- form grid (Log a purchase / Filter & sort contents) ---------- */
 .form-grid {
   display: grid;
