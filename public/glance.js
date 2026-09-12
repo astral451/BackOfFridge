@@ -111,12 +111,6 @@
     minusBtn.title = item.tracking_mode === 'fill_level' ? '-10%' : '-1';
     minusBtn.addEventListener('click', function () { quickAdjust(item, -1); });
 
-    var qtyVal = document.createElement('span');
-    qtyVal.className = 'qty-val';
-    qtyVal.textContent = item.tracking_mode === 'fill_level'
-      ? (item.fill_percent != null ? item.fill_percent : 100) + '%'
-      : item.quantity + (item.unit ? ' ' + item.unit : '');
-
     var plusBtn = document.createElement('button');
     plusBtn.type = 'button';
     plusBtn.textContent = '+';
@@ -124,9 +118,15 @@
     plusBtn.addEventListener('click', function () { quickAdjust(item, 1); });
 
     stepper.appendChild(minusBtn);
-    stepper.appendChild(qtyVal);
     stepper.appendChild(plusBtn);
     wrap.appendChild(stepper);
+
+    var qtyVal = document.createElement('div');
+    qtyVal.className = 'qty-val';
+    qtyVal.textContent = item.tracking_mode === 'fill_level'
+      ? (item.fill_percent != null ? item.fill_percent : 100) + '%'
+      : item.quantity + (item.unit ? ' ' + item.unit : '');
+    wrap.appendChild(qtyVal);
 
     if (item.tracking_mode === 'fill_level') {
       var track = document.createElement('div');

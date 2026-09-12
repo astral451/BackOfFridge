@@ -78,6 +78,7 @@
   // typically differ on a new purchase.
   function fillFormFromItem(item) {
     openSheet();
+    setAddMode();
     document.getElementById('f-name').value = item.name;
     document.getElementById('f-category').value = item.category;
     document.getElementById('f-location-select').value = item.location;
@@ -424,6 +425,7 @@
   // so a parsed tag/date/note isn't silently hidden from view.
   function fillFormFromQuickAdd(parsed) {
     openSheet();
+    setAddMode();
     document.getElementById('f-name').value = parsed.name;
     if (parsed.quantity !== null) document.getElementById('f-quantity').value = parsed.quantity;
     if (parsed.unit) document.getElementById('f-unit').value = parsed.unit;
@@ -450,168 +452,79 @@
     document.getElementById('f-name').focus();
   }
 
-  // Replaces the row's contents with a vertical, one-row-per-field grid
-  // covering every editable field - name, category, location, tag,
-  // quantity/unit (or fill %), purchase/expiration dates, and notes -
-  // reusing the same <select>s built for the purchase form rather than
-  // inventing new controls. Cancel/refresh discards unsaved changes and
-  // redraws the row normally.
-  function startFullFieldEdit(item, row) {
-    row.innerHTML = '';
-    row.classList.add('full-edit-cell');
+  // Which item (if any) the purchase sheet is currently editing, rather than
+  // logging a new purchase - null in "add" mode. editingTrackingMode tracks
+  // that item's tracking mode so submit knows whether to send quantity/unit
+  // or fill_percent (the compact form only shows one set of inputs).
+  var editingItemId = null;
+  var editingTrackingMode = null;
 
-    var grid = document.createElement('div');
-    grid.className = 'full-edit-grid';
+  // Restores the sheet to its default "log a new purchase" mode: quantity/
+  // unit visible, no fill %, title and button text reset. Does not touch
+  // field values - callers that are about to fill the form (quick-add, Buy
+  // again) call this first so they don't inherit a stale edit target.
+  function setAddMode() {
+    editingItemId = null;
+    editingTrackingMode = null;
+    document.getElementById('f-quantity').classList.remove('hidden');
+    document.getElementById('f-unit').classList.remove('hidden');
+    document.getElementById('f-fillpercent').classList.add('hidden');
+    document.querySelector('#itemSheet h2').textContent = 'Log a purchase';
+    document.querySelector('#itemForm .save-btn').textContent = 'Add item';
+  }
 
-    function row(labelText, inputEl) {
-      var label = document.createElement('label');
-      label.textContent = labelText;
-      grid.appendChild(label);
-      grid.appendChild(inputEl);
-    }
+  // Full reset for opening a blank form (the "+" button, and after a
+  // successful add/save) - clears every field on top of setAddMode's mode
+  // reset.
+  function resetItemForm() {
+    document.getElementById('itemForm').reset();
+    document.getElementById('f-category').value = 'perishable';
+    document.getElementById('f-location-new').classList.add('hidden');
+    document.getElementById('f-tag-new').classList.add('hidden');
+    document.getElementById('moreFields').hidden = true;
+    setDefaultPurchaseDate();
+    setAddMode();
+  }
 
-    var nameInput = document.createElement('input');
-    nameInput.type = 'text';
-    nameInput.value = item.name;
-    row('Name', nameInput);
+  // Opens the same purchase sheet used for adding, pre-filled with every
+  // editable field on `item`, and switches submit to PATCH that item
+  // instead of POSTing a new one. This is the "Edit" action from the
+  // overflow menu - bringing up the full add form (rather than a separate
+  // inline editor) means every field is reachable through controls that
+  // already work correctly (location/tag pickers, date inputs, etc).
+  function startEdit(item) {
+    openSheet();
+    editingItemId = item.id;
+    editingTrackingMode = item.tracking_mode;
 
-    var categorySelect = document.createElement('select');
-    [['perishable', 'Perishable'], ['nonperishable', 'Non-perishable']].forEach(function (pair) {
-      var opt = document.createElement('option');
-      opt.value = pair[0];
-      opt.textContent = pair[1];
-      categorySelect.appendChild(opt);
-    });
-    categorySelect.value = item.category;
-    row('Category', categorySelect);
+    document.getElementById('f-name').value = item.name;
+    document.getElementById('f-category').value = item.category;
+    document.getElementById('f-location-select').value = item.location;
+    document.getElementById('f-location-new').classList.add('hidden');
+    document.getElementById('f-tag-select').value = item.tag || '';
+    document.getElementById('f-tag-new').classList.add('hidden');
+    document.getElementById('f-purchase').value = item.purchase_date || '';
+    document.getElementById('f-expiration').value = item.expiration_date || '';
+    document.getElementById('f-notes').value = item.notes || '';
 
-    var locationSelect = document.createElement('select');
-    locationSelect.disabled = true;
-    var loadingLocOpt = document.createElement('option');
-    loadingLocOpt.textContent = 'Loading...';
-    locationSelect.appendChild(loadingLocOpt);
-    row('Location', locationSelect);
-
-    var tagSelect = document.createElement('select');
-    tagSelect.disabled = true;
-    var loadingTagOpt = document.createElement('option');
-    loadingTagOpt.textContent = 'Loading...';
-    tagSelect.appendChild(loadingTagOpt);
-    row('Tag', tagSelect);
-
-    var quantityInput, unitInput, fillInput;
     if (item.tracking_mode === 'fill_level') {
-      fillInput = document.createElement('input');
-      fillInput.type = 'number';
-      fillInput.min = 0;
-      fillInput.max = 100;
-      fillInput.value = item.fill_percent != null ? item.fill_percent : 100;
-      row('Fill %', fillInput);
+      document.getElementById('f-quantity').classList.add('hidden');
+      document.getElementById('f-unit').classList.add('hidden');
+      document.getElementById('f-fillpercent').classList.remove('hidden');
+      document.getElementById('f-fillpercent').value = item.fill_percent != null ? item.fill_percent : 100;
     } else {
-      quantityInput = document.createElement('input');
-      quantityInput.type = 'number';
-      quantityInput.step = 'any';
-      quantityInput.value = item.quantity;
-      row('Quantity', quantityInput);
-
-      unitInput = document.createElement('input');
-      unitInput.type = 'text';
-      unitInput.value = item.unit || '';
-      row('Unit', unitInput);
+      document.getElementById('f-quantity').classList.remove('hidden');
+      document.getElementById('f-unit').classList.remove('hidden');
+      document.getElementById('f-fillpercent').classList.add('hidden');
+      document.getElementById('f-quantity').value = item.quantity;
+      document.getElementById('f-unit').value = item.unit || '';
     }
 
-    var purchaseInput = document.createElement('input');
-    purchaseInput.type = 'date';
-    purchaseInput.value = item.purchase_date || '';
-    row('Purchased', purchaseInput);
-
-    var expirationInput = document.createElement('input');
-    expirationInput.type = 'date';
-    expirationInput.value = item.expiration_date || '';
-    row('Expires', expirationInput);
-
-    var notesInput = document.createElement('input');
-    notesInput.type = 'text';
-    notesInput.value = item.notes || '';
-    row('Notes', notesInput);
-
-    row.appendChild(grid);
-
-    var buttons = document.createElement('div');
-    buttons.className = 'full-edit-buttons';
-
-    var saveBtn = document.createElement('button');
-    saveBtn.textContent = 'Save';
-    saveBtn.className = 'small';
-    saveBtn.addEventListener('click', function () {
-      var name = nameInput.value.trim();
-      if (!name) {
-        alert('Name is required.');
-        return;
-      }
-      var updates = {
-        name: name,
-        category: categorySelect.value,
-        location: locationSelect.value,
-        tag: tagSelect.value,
-        purchase_date: purchaseInput.value || null,
-        expiration_date: expirationInput.value || null,
-        notes: notesInput.value,
-      };
-      if (item.tracking_mode === 'fill_level') {
-        var pct = parseFloat(fillInput.value);
-        if (!(pct >= 0 && pct <= 100)) {
-          alert('Fill % must be between 0 and 100.');
-          return;
-        }
-        updates.fill_percent = pct;
-      } else {
-        var quantity = parseFloat(quantityInput.value);
-        if (!(quantity >= 0)) {
-          alert('Enter a quantity of zero or more.');
-          return;
-        }
-        updates.quantity = quantity;
-        updates.unit = unitInput.value;
-      }
-      apiFetch('/items/' + item.id, { method: 'PATCH', body: JSON.stringify(updates) })
-        .then(refresh)
-        .catch(function (err) { alert(err.message); });
-    });
-
-    var cancelBtn = document.createElement('button');
-    cancelBtn.textContent = 'Cancel';
-    cancelBtn.className = 'small';
-    cancelBtn.addEventListener('click', refresh);
-
-    buttons.appendChild(saveBtn);
-    buttons.appendChild(cancelBtn);
-    row.appendChild(buttons);
-
-    Promise.all([apiFetch('/locations'), apiFetch('/tags')]).then(function (results) {
-      var locations = results[0];
-      var tags = results[1];
-
-      locationSelect.innerHTML = '';
-      locations.forEach(function (loc) {
-        var opt = document.createElement('option');
-        opt.value = loc;
-        opt.textContent = loc;
-        locationSelect.appendChild(opt);
-      });
-      locationSelect.value = item.location;
-      locationSelect.disabled = false;
-
-      tagSelect.innerHTML = '<option value="">(none)</option>';
-      tags.forEach(function (tag) {
-        var opt = document.createElement('option');
-        opt.value = tag;
-        opt.textContent = tag;
-        tagSelect.appendChild(opt);
-      });
-      tagSelect.value = item.tag || '';
-      tagSelect.disabled = false;
-    }).catch(function (err) { alert(err.message); });
+    document.querySelector('#itemSheet h2').textContent = 'Edit item';
+    document.querySelector('#itemForm .save-btn').textContent = 'Save changes';
+    expandMoreFields();
+    document.getElementById('itemSheet').scrollIntoView({ behavior: 'smooth' });
+    document.getElementById('f-name').focus();
   }
 
   // Quick +/- for the common "used/added one" case, with no prompt. Count-
@@ -665,12 +578,6 @@
     minusBtn.textContent = '−';
     minusBtn.title = item.tracking_mode === 'fill_level' ? '-10%' : '-1';
 
-    var qtyVal = document.createElement('span');
-    qtyVal.className = 'qty-val';
-    qtyVal.textContent = item.tracking_mode === 'fill_level'
-      ? (item.fill_percent != null ? item.fill_percent : 100) + '%'
-      : item.quantity + (item.unit ? ' ' + item.unit : '');
-
     var plusBtn = document.createElement('button');
     plusBtn.type = 'button';
     plusBtn.textContent = '+';
@@ -685,9 +592,19 @@
     }
 
     stepper.appendChild(minusBtn);
-    stepper.appendChild(qtyVal);
     stepper.appendChild(plusBtn);
     wrap.appendChild(stepper);
+
+    // Value sits on its own full-width line below the buttons rather than
+    // squeezed between them - a long "quantity + unit" combo (e.g.
+    // "2 gallon") has nowhere near enough room in that gap and gets
+    // truncated, while the full stepper-wrap width comfortably fits it.
+    var qtyVal = document.createElement('div');
+    qtyVal.className = 'qty-val';
+    qtyVal.textContent = item.tracking_mode === 'fill_level'
+      ? (item.fill_percent != null ? item.fill_percent : 100) + '%'
+      : item.quantity + (item.unit ? ' ' + item.unit : '');
+    wrap.appendChild(qtyVal);
 
     if (item.tracking_mode === 'fill_level') {
       var track = document.createElement('div');
@@ -764,7 +681,7 @@
       });
     }
     addAction('Edit', function () {
-      startFullFieldEdit(item, row);
+      startEdit(item);
     });
     if (item.tracking_mode === 'fill_level') {
       addAction('Track by count', function () {
@@ -1084,19 +1001,28 @@
       category: document.getElementById('f-category').value,
       location: currentFormLocation(),
       tag: currentFormTag(),
-      quantity: parseFloat(document.getElementById('f-quantity').value) || 1,
-      unit: document.getElementById('f-unit').value,
       purchase_date: document.getElementById('f-purchase').value || null,
       expiration_date: document.getElementById('f-expiration').value || null,
       notes: document.getElementById('f-notes').value,
     };
-    apiFetch('/items', { method: 'POST', body: JSON.stringify(payload) }).then(function () {
-      e.target.reset();
-      document.getElementById('f-category').value = 'perishable';
-      document.getElementById('f-location-new').classList.add('hidden');
-      document.getElementById('f-tag-new').classList.add('hidden');
-      document.getElementById('moreFields').hidden = true;
-      setDefaultPurchaseDate();
+    if (editingItemId && editingTrackingMode === 'fill_level') {
+      var pct = parseFloat(document.getElementById('f-fillpercent').value);
+      if (!(pct >= 0 && pct <= 100)) {
+        alert('Fill % must be between 0 and 100.');
+        return;
+      }
+      payload.fill_percent = pct;
+    } else {
+      payload.quantity = parseFloat(document.getElementById('f-quantity').value) || 1;
+      payload.unit = document.getElementById('f-unit').value;
+    }
+
+    var request = editingItemId
+      ? apiFetch('/items/' + editingItemId, { method: 'PATCH', body: JSON.stringify(payload) })
+      : apiFetch('/items', { method: 'POST', body: JSON.stringify(payload) });
+
+    request.then(function () {
+      resetItemForm();
       closeSheet();
       refresh();
     }).catch(function (err) {
@@ -1114,16 +1040,14 @@
   });
 
   document.getElementById('openSheetBtn').addEventListener('click', function () {
-    document.getElementById('itemForm').reset();
-    document.getElementById('f-category').value = 'perishable';
-    document.getElementById('f-location-new').classList.add('hidden');
-    document.getElementById('f-tag-new').classList.add('hidden');
-    document.getElementById('moreFields').hidden = true;
-    setDefaultPurchaseDate();
+    resetItemForm();
     openSheet();
     document.getElementById('f-name').focus();
   });
-  document.getElementById('closeSheetBtn').addEventListener('click', closeSheet);
+  document.getElementById('closeSheetBtn').addEventListener('click', function () {
+    resetItemForm();
+    closeSheet();
+  });
 
   // Generic disclosure toggles - "More fields" on the purchase form and
   // "Filter & sort" above the list both just show/hide their target panel.

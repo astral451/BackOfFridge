@@ -333,8 +333,8 @@ body:has(.bottombar) { padding-bottom: 84px; } /* room for the fixed bottom bar 
 /* ---------- stepper (fixed width so every row lines up) ---------- */
 .stepper-wrap { flex: 0 0 116px; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .stepper {
-  display: flex; align-items: center; justify-content: space-between;
-  background: var(--bg); border-radius: 9px; padding: 3px; min-width: 0;
+  display: flex; align-items: center; justify-content: center; gap: 18px;
+  background: var(--bg); border-radius: 9px; padding: 4px; min-width: 0;
 }
 .stepper button {
   width: 26px; height: 26px; border-radius: 7px; border: none;
@@ -345,7 +345,7 @@ body:has(.bottombar) { padding-bottom: 84px; } /* room for the fixed bottom bar 
 .qty-val {
   font-family: "JetBrains Mono", monospace; font-size: 0.72rem;
   font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden;
-  text-overflow: ellipsis; padding: 0 4px;
+  text-overflow: ellipsis; text-align: center; width: 100%; min-width: 0;
 }
 .fill-track { width: 100%; height: 6px; border-radius: 999px; background: var(--surface-2); position: relative; }
 .fill-bar { position: absolute; inset: 0; border-radius: 999px; background: var(--accent); }
@@ -385,32 +385,6 @@ body:has(.bottombar) { padding-bottom: 84px; } /* room for the fixed bottom bar 
   cursor: pointer;
 }
 .overflow-menu button:hover { background: var(--surface); }
-
-/* ---------- full-field edit grid ---------- */
-.full-edit-cell {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 12px;
-}
-.full-edit-grid {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 0.5rem 0.75rem;
-  align-items: center;
-  max-width: 480px;
-}
-.full-edit-grid label { font-weight: 600; font-size: 0.8rem; color: var(--muted); }
-.full-edit-grid input, .full-edit-grid select {
-  padding: 7px 8px;
-  width: 100%;
-  font-size: 16px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text);
-}
-.full-edit-buttons { margin-top: 0.75rem; display: flex; gap: 8px; }
 
 .low-stock-badge {
   display: inline-block;
