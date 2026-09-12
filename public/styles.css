@@ -521,7 +521,7 @@ body:has(.bottombar) { padding-bottom: 84px; } /* room for the fixed bottom bar 
   .add-shell.with-panel .bottombar #openSheetBtn { display: none; }
   .add-shell.with-panel .sheet {
     position: static;
-    flex: 0 0 300px;
+    flex: 0 0 340px;
     width: auto;
     max-width: none;
     border-radius: 12px;
@@ -529,5 +529,10 @@ body:has(.bottombar) { padding-bottom: 84px; } /* room for the fixed bottom bar 
     box-shadow: none;
     display: block !important;
   }
+  /* There's room for every field at once here, so the disclosure that
+     narrow phone widths need (More fields ▾) is pointless - show the
+     whole form and drop the toggle that would otherwise show/hide it. */
+  .add-shell.with-panel .sheet [data-toggle="moreFields"] { display: none; }
+  .add-shell.with-panel .sheet #moreFields { display: grid !important; }
   body:has(.bottombar) { padding-bottom: 32px; }
 }
