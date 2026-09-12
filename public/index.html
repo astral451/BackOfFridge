@@ -2,6 +2,18 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<script>
+// Applies a manually-chosen theme (set on the Settings page) before the
+// page paints, so there's no flash of the wrong theme. Left alone (no
+// data-theme attribute) means "Auto" - follow the browser/OS setting via
+// the prefers-color-scheme rules in styles.css.
+(function () {
+  try {
+    var t = localStorage.getItem('theme');
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+  } catch (e) {}
+})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BackOfFridge</title>
 <link rel="stylesheet" href="styles.css">
@@ -13,6 +25,7 @@
     <a href="glance.html">At a glance</a>
     <a href="locations.html">Manage locations</a>
     <a href="tags.html">Manage tags</a>
+    <a href="settings.html">Settings</a>
     <span id="whoami" class="stats"></span>
     <button id="logoutBtn" class="small">Log out</button>
   </header>

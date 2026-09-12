@@ -12,25 +12,29 @@
 })();
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BackOfFridge - At a Glance</title>
+<title>BackOfFridge - Settings</title>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header>
-    <h1>At a Glance</h1>
-    <a href="index.html">&larr; Full inventory</a>
+    <h1>Settings</h1>
+    <a href="index.html">&larr; Back to inventory</a>
     <span id="whoami" class="stats"></span>
     <button id="logoutBtn" class="small">Log out</button>
   </header>
 
   <main id="app">
-    <section class="filters">
-      <label>Location: <select id="filterLocation"><option value="">All</option></select></label>
+    <section class="settings-section">
+      <h2>Appearance</h2>
+      <p class="settings-desc">Auto matches your browser or device's own light/dark setting.</p>
+      <div class="chip-row" id="themeChips">
+        <button class="chip" type="button" data-theme="auto">Auto</button>
+        <button class="chip" type="button" data-theme="light">Light</button>
+        <button class="chip" type="button" data-theme="dark">Dark</button>
+      </div>
     </section>
-
-    <div id="itemGroups"></div>
   </main>
 
-  <script src="glance.js"></script>
+  <script src="settings.js"></script>
 </body>
 </html>

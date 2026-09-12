@@ -4,7 +4,15 @@
    sage-green accent, dark warm-brown text. Dark theme ("Cold Storage",
    the original design) takes over automatically under
    prefers-color-scheme: dark, so the app follows the browser/OS setting
-   with no manual toggle needed. */
+   by default.
+   The Settings page can also override this per-browser (stored in
+   localStorage, applied as a data-theme attribute by the inline snippet
+   at the top of every page's <head> - see settings.js): the
+   :not([data-theme="light"]) guard below lets an explicit "Light" choice
+   win even when the OS is dark, and the plain :root[data-theme="dark"]
+   rule (outside any media query) lets an explicit "Dark" choice win even
+   when the OS is light. No override (the "Auto" choice) means neither
+   attribute is set, so only the plain prefers-color-scheme rule applies. */
 :root {
   --bg: #faf6ef;
   --surface: #ffffff;
@@ -24,7 +32,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #1b2430;
     --surface: #232e3d;
     --surface-2: #161e28;
@@ -41,6 +49,24 @@
     --expired-row-bg: rgba(232, 93, 93, 0.14);
     --shadow: rgba(0, 0, 0, 0.5);
   }
+}
+
+:root[data-theme="dark"] {
+  --bg: #1b2430;
+  --surface: #232e3d;
+  --surface-2: #161e28;
+  --border: #2c3948;
+  --text: #e7eef2;
+  --muted: #7f92a1;
+  --accent: #6fd6e0;
+  --accent-ink: #0c2126;
+  --warn-bg: #4a3a1c;
+  --warn-text: #e8a33d;
+  --danger-bg: #4a2222;
+  --danger-text: #e85d5d;
+  --soon-row-bg: rgba(232, 163, 61, 0.1);
+  --expired-row-bg: rgba(232, 93, 93, 0.14);
+  --shadow: rgba(0, 0, 0, 0.5);
 }
 
 * { box-sizing: border-box; }
@@ -468,6 +494,17 @@ body:has(.bottombar) { padding-bottom: 84px; } /* room for the fixed bottom bar 
   border: 1px solid var(--border); background: var(--surface); color: var(--text);
 }
 .filters label { font-size: 0.82rem; color: var(--muted); }
+
+/* ---------- Settings page ---------- */
+.settings-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 12px;
+}
+.settings-section h2 { font-size: 0.95rem; margin: 0 0 4px; }
+.settings-desc { font-size: 0.8rem; color: var(--muted); margin: 0 0 10px; }
 
 /* ---------- iPad+/desktop: add-item panel sits beside the list, not below it ---------- */
 @media (min-width: 720px) {
