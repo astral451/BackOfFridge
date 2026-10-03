@@ -195,10 +195,45 @@ button.small:disabled { opacity: 0.4; cursor: not-allowed; }
 }
 .disclosure-toggle:hover { color: var(--text); }
 
-/* The Filter & sort toggle row - the toggle stays flexible so the Reset
-   button can sit at the right edge whether the panel is open or closed. */
-.filter-bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.filter-bar-row .disclosure-toggle { width: auto; flex: 1; margin-bottom: 0; }
+/* Search box + Filters toggle + Reset on one row. Search sits outside the
+   collapsible panel so it's always one tap away; the panel only holds the
+   less-used location/tag/sort controls. */
+.filter-bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.filter-bar-row .search-input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 16px; /* below 16px, iOS Safari zooms the page on focus */
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+.filter-bar-row .disclosure-toggle { width: auto; flex: 0 0 auto; margin-bottom: 0; }
+
+/* By location / All items segmented control. */
+.view-toggle {
+  display: flex;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 3px;
+  margin-bottom: 10px;
+}
+.view-toggle button {
+  flex: 1;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 7px 0;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.view-toggle button.active { background: var(--accent); color: var(--accent-ink); }
 .reset-filters-btn {
   flex: 0 0 auto;
   background: none;
@@ -445,6 +480,7 @@ body:has(.bottombar) { padding-bottom: 84px; } /* room for the fixed bottom bar 
   flex-direction: column;
   min-width: 160px;
 }
+.overflow-menu.open-up { top: auto; bottom: 100%; margin-top: 0; margin-bottom: 4px; }
 .overflow-menu button {
   text-align: left;
   border: none;

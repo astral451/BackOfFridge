@@ -171,8 +171,9 @@
   reuse data already computed per item, no new query needed. A
   "Search, filter, sort ▾" disclosure holds the existing location/tag/
   search/sort controls (search first, since it's the most-used one), with a
-  one-tap Reset button next to the toggle whenever any of them is active.
-  The quick-add "+" button also processes whatever's still sitting in the
+  one-tap Reset button next to the toggle whenever any of them is active
+  (search has since moved out of the disclosure to stay always visible;
+  see below). The quick-add "+" button also processes whatever's still sitting in the
   quick-add box (dictation often leaves text there without a keyboard
   Return press) instead of silently discarding it in favor of a blank form.
 - Light theme, auto-switching ("Pantry Fresh") — a warm cream, sage-green
@@ -209,6 +210,33 @@
   consumed-vs-thrown-out counts. Run with no arguments to list the
   available commands (works even without `sqlite3` installed or a database
   present yet, checked before either of those).
+- Dictation-resilient quick-add parsing — `parseQuickAdd` (`public/app.js`)
+  no longer treats commas as the thing that decides which field is which,
+  since iPhone dictation places them unreliably (and saying "comma" out loud
+  to fix that was slow). Each field is now found by a keyword or by being
+  unambiguous on its own: a full date anywhere in the line is the
+  expiration date, no "expires" needed (purchase date already defaults to
+  today); "size"/"volume"/"weight" separate a count from a per-item size
+  ("quantity two size 24 ounces"), and so does a comma between the two
+  numbers ("two, 24 ounces"), whether typed or said as "comma"; location
+  and tag are matched anywhere in the line, not just at the end. Built
+  against real dictated lines collected in `dictation_examples.md`, which
+  also documents the keyword rules. One case stays unfixable by design:
+  once dictation has merged "two twenty-four ounces" into "224 ounces",
+  the text can't say which was meant. A separator word or comma is what
+  prevents that.
+- "By location / All items" view toggle — the main list can now show every
+  item in one flat list (the server's expiration-first order, location
+  shown in each row's detail line) instead of one collapsible section per
+  location, for scanning everything at once for what's expiring or low.
+  Status chips, search, filters and row actions work the same in both
+  views. The choice is remembered per browser in `localStorage`.
+- Search box always visible — moved out of the collapsible panel onto the
+  toggle row, so searching never needs an extra tap. The panel (now just
+  "Filters ▾") holds only location/tag/sort.
+- Fix: the "⋯" row menu opens upward when there isn't room below it. On
+  the last rows of the list it used to open under the fixed quick-add bar,
+  leaving its actions untappable.
 
 ## Roadmap
 
@@ -236,8 +264,16 @@ priority — a Low item isn't necessarily more worth doing than a High one.
   image matching, likely an external vision API call per photo, and
   barcode scanning above already covers the same "auto-identify a
   product" goal far more cheaply and reliably if that's ever wanted.)
+- **Bulk entry from a list (Medium)** — paste a block of lines (e.g. an
+  iPhone Notes list, one item per line) and log them all at once. Each line
+  goes through the same `parseQuickAdd` as the quick-add box, and the
+  results show as editable review cards with a ✕ to drop one. Nothing is
+  saved until "Add all", which addresses the concern that one bad line in
+  a batch is hard to go back and fix. Builds directly on the
+  dictation-resilient parser (Shipped), so it's only as good as that is.
 - **Dictation for adding items — better parsing.** The freeform quick-add
-  box + naive regex parser shipped above; two fancier alternatives were
+  box shipped above, and its parser was since made resilient to dictation's
+  comma placement (see Shipped). Two fancier alternatives were
   considered and not chosen for that pass, still available as a fast-
   follow if the naive parser proves too fragile in practice: parsing via
   an LLM call instead of regex (Medium — more robust, but a new external

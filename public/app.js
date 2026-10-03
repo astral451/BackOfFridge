@@ -838,7 +838,23 @@
     });
 
     row.appendChild(menu);
+    placeOverflowMenu(menu, row);
     return menu;
+  }
+
+  // Menus open downward by default, but near the bottom of the list that
+  // runs them under the fixed quick-add bar (which sits above them) or off
+  // the screen, leaving the last few actions untappable. Flip upward
+  // whenever there's more room above the row than below it.
+  function placeOverflowMenu(menu, row) {
+    var bar = document.querySelector('.bottombar');
+    var limit = window.innerHeight;
+    if (bar && getComputedStyle(bar).position === 'fixed') limit = bar.getBoundingClientRect().top;
+    var rowRect = row.getBoundingClientRect();
+    var menuHeight = menu.getBoundingClientRect().height;
+    var spaceBelow = limit - rowRect.bottom;
+    var spaceAbove = rowRect.top;
+    if (menuHeight + 8 > spaceBelow && spaceAbove > spaceBelow) menu.classList.add('open-up');
   }
 
   // Renders the relative-days expiry text used in a row's meta line, for
@@ -851,7 +867,7 @@
     return 'in ' + d + (d === 1 ? ' day' : ' days');
   }
 
-  function buildItemRow(item) {
+  function buildItemRow(item, showLocation) {
     var row = document.createElement('div');
     row.className = 'item-row ' + rowClass(item);
 
@@ -877,7 +893,11 @@
     }
     main.appendChild(nameLine);
 
-    var metaParts = [item.category];
+    var metaParts = [];
+    // In the flat view rows aren't under a location heading, so the row
+    // itself has to say where the item is.
+    if (showLocation) metaParts.push(item.location || '(no location)');
+    metaParts.push(item.category);
     if (item.tag) metaParts.push(item.tag);
     if (item.status === 'active') {
       var expText = expiresText(item);
@@ -916,9 +936,27 @@
   // action re-fetches and re-renders the whole list).
   var collapsedGroups = {};
 
+  // "grouped" (one collapsible section per location) or "flat" (every item
+  // in one list, in the server's expiration-first order, for scanning
+  // everything at once). Remembered per browser, like the theme.
+  var viewMode = 'grouped';
+  try {
+    if (localStorage.getItem('listView') === 'flat') viewMode = 'flat';
+  } catch (e) {}
+
   function renderItems(items) {
     var container = document.getElementById('itemGroups');
     container.innerHTML = '';
+
+    if (viewMode === 'flat') {
+      var flatRows = document.createElement('div');
+      flatRows.className = 'rows';
+      items.forEach(function (item) {
+        flatRows.appendChild(buildItemRow(item, true));
+      });
+      container.appendChild(flatRows);
+      return;
+    }
 
     var byLoc = {};
     items.forEach(function (item) {
@@ -1062,7 +1100,7 @@
     updateResetFiltersVisibility();
   }
 
-  // Shows the "Reset" button (next to the Filter & sort toggle, visible
+  // Shows the "Reset" button (next to the Filters toggle, visible
   // whether the panel is open or closed) whenever any of location/tag/
   // search/sort is non-default, so there's always a one-tap way back to
   // the unfiltered list without having to open the panel first.
@@ -1197,13 +1235,28 @@
   });
 
   // Generic disclosure toggles - "More fields" on the purchase form and
-  // "Filter & sort" above the list both just show/hide their target panel.
+  // "Filters" above the list both just show/hide their target panel.
   document.querySelectorAll('[data-toggle]').forEach(function (btn) {
     btn.addEventListener('click', function () {
       var target = document.getElementById(btn.getAttribute('data-toggle'));
       if (target) target.hidden = !target.hidden;
     });
   });
+
+  function syncViewToggle() {
+    document.querySelectorAll('#viewToggle button').forEach(function (b) {
+      b.classList.toggle('active', b.getAttribute('data-view') === viewMode);
+    });
+  }
+  document.querySelectorAll('#viewToggle button').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      viewMode = btn.getAttribute('data-view');
+      try { localStorage.setItem('listView', viewMode); } catch (e) {}
+      syncViewToggle();
+      applyFiltersAndRender();
+    });
+  });
+  syncViewToggle();
 
   document.querySelectorAll('#statusChips .chip').forEach(function (chip) {
     chip.addEventListener('click', function () {
