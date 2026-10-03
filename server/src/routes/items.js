@@ -141,6 +141,9 @@ router.patch('/:id', (req, res) => {
   if (updates.fill_percent != null && !(updates.fill_percent >= 0 && updates.fill_percent <= 100)) {
     return res.status(400).json({ error: 'fill_percent must be between 0 and 100' });
   }
+  if (updates.quantity !== undefined && !(typeof updates.quantity === 'number' && updates.quantity >= 0)) {
+    return res.status(400).json({ error: 'quantity must be a number, 0 or more' });
+  }
 
   const merged = { ...existing, ...updates };
   db.prepare(`
@@ -155,10 +158,24 @@ router.patch('/:id', (req, res) => {
 
   const changedFields = Object.keys(updates);
   const onlyFillPercentChanged = changedFields.length === 1 && updates.fill_percent !== undefined;
+  // `recount: true` marks a direct "this is how much is actually left" set
+  // from the row's quick edit, as opposed to an ordinary edit or a +/- tap.
+  // It's recorded as its own event type so usage analysis can tell an
+  // explicit correction (catching the app up on consumption that happened
+  // gradually) apart from consumption at that moment.
+  const recountField = req.body.recount === true && changedFields.length === 1
+    && ['quantity', 'fill_percent'].includes(changedFields[0]) ? changedFields[0] : null;
   const dateFields = ['purchase_date', 'expiration_date'];
   const onlyDatesChanged = changedFields.length > 0 && changedFields.every((f) => dateFields.includes(f));
 
-  if (onlyFillPercentChanged) {
+  if (recountField) {
+    db.recordEvent(existing.id, existing.name, 'recount', {
+      field: recountField,
+      from: existing[recountField],
+      to: updates[recountField],
+      unit: recountField === 'fill_percent' ? '%' : existing.unit,
+    }, req.username);
+  } else if (onlyFillPercentChanged) {
     db.recordEvent(existing.id, existing.name, 'fill_level_set', { from: existing.fill_percent, to: updates.fill_percent }, req.username);
   } else if (onlyDatesChanged) {
     // A date correction (e.g. fixing a wrong expiration) isn't a

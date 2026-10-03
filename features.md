@@ -240,6 +240,19 @@
 - Search box always visible — moved out of the collapsible panel onto the
   toggle row, so searching never needs an extra tap. The panel (now just
   "Filters ▾") holds only location/tag/sort.
+- Quick set: tap a row's amount to type what's actually left. Tapping
+  the quantity (or a fill-level item's bar) on an active row swaps it for
+  a number box pre-filled with the current value. Done/Enter or tapping
+  away saves, Escape cancels, and 0 marks the item consumed. This is one
+  action for what used to take five or ten − taps when catching the app
+  up (see "Usage analysis" in the Roadmap). It also covers setting a new
+  fill-level item's real starting level. Saved through the existing PATCH
+  with a `recount: true` flag, which records a single `recount` event
+  (`{field, from, to, unit}`) instead of `edited`/`fill_level_set`, so
+  analysis can tell an explicit correction from consumption at that
+  moment. `common_sql_commands.sh catch-up` lists downward recounts
+  alongside tap bursts (`via` column). Main inventory page only, for now;
+  At a Glance still has just −/+.
 - Fix: the "⋯" row menu opens upward when there isn't room below it. On
   the last rows of the list it used to open under the fixed quick-add bar,
   leaving its actions untappable.

@@ -757,8 +757,9 @@
       : item.quantity + (item.unit ? ' ' + item.unit : '');
     wrap.appendChild(qtyVal);
 
+    var track = null;
     if (item.tracking_mode === 'fill_level') {
-      var track = document.createElement('div');
+      track = document.createElement('div');
       track.className = 'fill-track';
       var bar = document.createElement('div');
       bar.className = 'fill-bar';
@@ -767,7 +768,98 @@
       wrap.appendChild(track);
     }
 
+    if (item.status === 'active') {
+      qtyVal.classList.add('editable');
+      qtyVal.setAttribute('role', 'button');
+      qtyVal.tabIndex = 0;
+      qtyVal.title = 'Tap to set how much is left';
+      qtyVal.addEventListener('click', function () { startQuickSet(item, qtyVal); });
+      qtyVal.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          startQuickSet(item, qtyVal);
+        }
+      });
+      if (track) {
+        track.classList.add('editable');
+        track.addEventListener('click', function () { startQuickSet(item, qtyVal); });
+      }
+    }
+
     return wrap;
+  }
+
+  // Quick set: tapping a row's amount swaps it for a number box to type
+  // what's actually left ("3", "30%") - one action instead of tapping -
+  // five or ten times to catch up on consumption that wasn't logged as it
+  // happened. Saved as a single `recount` event (see PATCH /items/:id).
+  // Done/Enter or tapping away saves, Escape cancels; 0 marks the item
+  // consumed, the same way - does at the bottom of the range.
+  function startQuickSet(item, qtyVal) {
+    var isFill = item.tracking_mode === 'fill_level';
+    var current = isFill ? (item.fill_percent != null ? item.fill_percent : 100) : item.quantity;
+
+    var editor = document.createElement('div');
+    editor.className = 'qty-edit';
+    var input = document.createElement('input');
+    input.type = 'number';
+    input.inputMode = 'decimal';
+    input.min = '0';
+    if (isFill) input.max = '100';
+    input.step = 'any';
+    input.value = current;
+    input.setAttribute('aria-label', 'How much "' + item.name + '" is left' + (isFill ? ' (%)' : item.unit ? ' (' + item.unit + ')' : ''));
+    editor.appendChild(input);
+    var suffix = isFill ? '%' : (item.unit || '');
+    if (suffix) {
+      var suffixSpan = document.createElement('span');
+      suffixSpan.className = 'qty-edit-unit';
+      suffixSpan.textContent = suffix;
+      editor.appendChild(suffixSpan);
+    }
+
+    qtyVal.replaceWith(editor);
+    input.focus();
+    input.select();
+
+    var finished = false;
+    function cancel() {
+      if (finished) return;
+      finished = true;
+      editor.replaceWith(qtyVal);
+    }
+    function save() {
+      if (finished) return;
+      var value = parseFloat(input.value);
+      if (isNaN(value) || value === current) return cancel();
+      if (value < 0 || (isFill && value > 100)) {
+        finished = true;
+        alert(isFill ? 'Enter a percentage from 0 to 100.' : 'Enter 0 or more.');
+        editor.replaceWith(qtyVal);
+        return;
+      }
+      finished = true;
+      var request = value === 0
+        ? apiFetch('/items/' + item.id + '/consume', { method: 'POST', body: JSON.stringify({}) })
+        : apiFetch('/items/' + item.id, {
+          method: 'PATCH',
+          body: JSON.stringify(isFill ? { fill_percent: value, recount: true } : { quantity: value, recount: true }),
+        });
+      request.then(refresh).catch(function (err) {
+        alert(err.message);
+        refresh();
+      });
+    }
+
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        save();
+      } else if (e.key === 'Escape') {
+        cancel();
+      }
+    });
+    input.addEventListener('blur', save);
   }
 
   function rowClass(item) {
