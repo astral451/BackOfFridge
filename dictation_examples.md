@@ -80,7 +80,7 @@ either by a keyword or by being unambiguous on its own.
 
 | Field      | Needs a keyword? | Rule |
 |------------|------------------|------|
-| Name       | No  | The words before the quantity, or before the first comma if that comes sooner. Say it first. |
+| Name       | No  | The words before the quantity, commas or not. Dictation drops commas inside product names, so a comma never ends the name. Say it first. |
 | Location   | No  | Matched (fuzzily) against the managed location list, anywhere in the line. |
 | Tag        | No  | Matched against the managed tag list, anywhere in the line. |
 | Expires    | Only for durations / partial dates | A full date ("May 16, 2027", "05/16/2027") is taken as the expiration on its own. Purchase date defaults to today, so a bare date means expiration. A duration ("expires in 2 weeks"), a date without a year ("expires May 16") or space-separated numbers ("expires 10 15 2026") need "expires". "exp", "expiration", "best by" and "use by" also work. |
@@ -91,3 +91,21 @@ either by a keyword or by being unambiguous on its own.
 The only keyword that's *required* is the separator between count and size,
 and a comma counts as one. Everything else is optional, and "expires" /
 "quantity" still work as extra-explicit forms.
+
+## Examples found while testing
+
+### 5. Comma inside a brand name, size keyword
+
+    Lesser evil, Himalayan pink salt popcorn, 21 size 1 ounce pan pantry March 8, 2027
+
+| Field      | Expected |
+|------------|----------|
+| Name       | Lesser evil Himalayan pink salt popcorn |
+| Quantity   | 21 (as written; meant to be 22, so dictation may have misheard) |
+| Unit/size  | 1 oz |
+| Location   | Pantry |
+| Expires    | 2027-03-08 |
+| Notes      | (empty: "pan" is a dictation stutter before "pantry" and is dropped) |
+
+An earlier rule ended the name at the first comma, which cut this to
+"Lesser evil". Removed: commas never end the name.

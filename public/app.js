@@ -407,6 +407,14 @@
     }
     if (!best) return '';
     for (var i = best.start; i < best.start + best.w; i++) used[i] = true;
+    // Dictation stutter: a false start just before the match that's the
+    // beginning of it ("pan pantry", "kitchen kitchen fridge") is dropped
+    // rather than left in the name or notes.
+    var prev = best.start - 1;
+    if (prev >= 0 && !used[prev] && tokens[prev].length >= 2 &&
+        best.entry.toLowerCase().indexOf(tokens[prev].toLowerCase()) === 0) {
+      used[prev] = true;
+    }
     return best.entry;
   }
 
@@ -426,8 +434,8 @@
   //     after the count ("1 5lb", "two, 24 ounces") - a comma, typed or
   //     spoken as "comma", between two numbers marks exactly that split
   //   - location/tag: fuzzy-matched against the managed lists, anywhere
-  //   - name: the words before the quantity (or before the first comma, if
-  //     sooner); anything after it is notes
+  //   - name: the words before the quantity, commas or not; anything
+  //     after it is notes
   function parseQuickAdd(text) {
     text = joinSplitTeens(text.trim());
     text = text.replace(/\s*\bcomma\b\s*/gi, ', ');
@@ -515,14 +523,10 @@
       for (var u = qtyStart; u < qtyEnd; u++) used[u] = true;
     }
 
-    // The name ends at the quantity, or at the first comma after it starts
-    // if that comes sooner ("Peanut butter, pantry, organic crunchy").
+    // The name is everything before the quantity. Commas don't end it -
+    // dictation drops them inside product names ("Lesser evil, Himalayan
+    // pink salt popcorn").
     var nameEnd = qtyStart === -1 ? tokens.length : qtyStart;
-    var nameStarted = false;
-    for (var n = 0; n < nameEnd; n++) {
-      if (tokens[n] === ',' && nameStarted) nameEnd = n;
-      else if (!used[n] && tokens[n] !== ',') nameStarted = true;
-    }
     var before = [];
     var after = [];
     tokens.forEach(function (tok, idx) {
