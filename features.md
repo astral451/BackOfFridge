@@ -206,8 +206,12 @@
 - Usage-history query tool (`common_sql_commands.sh`) — canned `sqlite3`
   queries over the `item_events` table for "what's actually being used"
   questions without hand-writing SQL each time: most-purchased items,
-  activity by user and event type, a recent-activity feed, and
-  consumed-vs-thrown-out counts. Run with no arguments to list the
+  activity by user and event type, a recent-activity feed,
+  consumed-vs-thrown-out counts, and `catch-up`: bursts of quick
+  reductions on one item (see "Usage analysis" in the Roadmap), with each
+  burst's tap count, total reduced, and days since the item's previous
+  event. Its thresholds are tunable with `BURST_MINUTES` (default 10) and
+  `BURST_MIN_TAPS` (default 3). Run with no arguments to list the
   available commands (works even without `sqlite3` installed or a database
   present yet, checked before either of those).
 - Dictation-resilient quick-add parsing — `parseQuickAdd` (`public/app.js`)
@@ -334,8 +338,9 @@ priority — a Low item isn't necessarily more worth doing than a High one.
   used" or "what day does it get consumed", spread the burst's total over
   that gap, or exclude bursts from timing questions entirely and keep them
   only for totals.
-  This only needs to inform how queries are written (e.g. a future
-  `common_sql_commands.sh` command or trends UI). Nothing about how events
+  `common_sql_commands.sh catch-up` lists these bursts today, for seeing
+  how often it happens in real data. This only needs to inform how
+  queries are written (e.g. a future trends UI). Nothing about how events
   are recorded needs to change, since the timestamps already carry the
   signal.
 - **Favorites filter** — surface the most-purchased items for quick re-up.
