@@ -243,6 +243,11 @@
 - Fix: the "⋯" row menu opens upward when there isn't room below it. On
   the last rows of the list it used to open under the fixed quick-add bar,
   leaving its actions untappable.
+- Fix: the "⋯" menu on consumed/thrown-out rows (visible under the "All"
+  chip) was half-transparent and drawn behind the rows below it. Those
+  rows were faded with `opacity` on the whole row, which also faded the
+  menu inside it and trapped its z-index within the row. Now only the
+  row's contents are faded, not the menu.
 
 ## Roadmap
 

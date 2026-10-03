@@ -427,7 +427,11 @@ body:has(.bottombar) { padding-bottom: 84px; } /* room for the fixed bottom bar 
 }
 .item-row.expired { background: var(--expired-row-bg); }
 .item-row.expiring-soon { background: var(--soon-row-bg); }
-.item-row.thrown_out, .item-row.consumed { opacity: 0.5; }
+/* Fade the row's contents, not the row: opacity below 1 on the row itself
+   would also fade its open ⋯ menu and trap the menu's z-index inside the
+   row, so later rows paint over it and its actions can't be tapped. */
+.item-row.thrown_out > :not(.overflow-menu),
+.item-row.consumed > :not(.overflow-menu) { opacity: 0.5; }
 .row-main { flex: 1; min-width: 0; }
 .row-name { font-weight: 600; font-size: 0.92rem; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .row-meta { font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
