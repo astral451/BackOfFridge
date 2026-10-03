@@ -83,7 +83,7 @@ either by a keyword or by being unambiguous on its own.
 | Name       | No  | The words before the quantity, commas or not. Dictation drops commas inside product names, so a comma never ends the name. Say it first. |
 | Location   | No  | Matched (fuzzily) against the managed location list, anywhere in the line. |
 | Tag        | No  | Matched against the managed tag list, anywhere in the line. |
-| Expires    | Only for durations / partial dates | A full date ("May 16, 2027", "05/16/2027") is taken as the expiration on its own. Purchase date defaults to today, so a bare date means expiration. A duration ("expires in 2 weeks"), a date without a year ("expires May 16") or space-separated numbers ("expires 10 15 2026") need "expires". "exp", "expiration", "best by" and "use by" also work. |
+| Expires    | Only for partial dates | A full date ("May 16, 2027", "05/16/2027") is taken as the expiration on its own. Purchase date defaults to today, so a bare date means expiration. A duration works without "expires" if it has "in" before it or "from today" after it: "in two weeks", "one month from today", "a month from today". A bare "2 weeks" with neither is left alone, because it could be a quantity. A date without a year ("expires May 16") or space-separated numbers ("expires 10 15 2026") still need "expires". "exp", "expiration", "best by" and "use by" also work. |
 | Quantity + size | **Yes, when both are spoken** | "quantity two **size** 24 ounces". "**volume**" and "**weight**" work the same as "size". A comma (typed, or said as "comma") between the two numbers also works: "two, 24 ounces". |
 | Quantity alone  | No  | "Milk 1 gallon" is fine: the first number, plus a unit if one follows. |
 | Notes      | No  | Anything left over after the quantity/size. |
@@ -109,3 +109,20 @@ and a comma counts as one. Everything else is optional, and "expires" /
 
 An earlier rule ended the name at the first comma, which cut this to
 "Lesser evil". Removed: commas never end the name.
+
+### 6. Relative expiration, no "expires"
+
+How a duration from the purchase date (today by default) actually gets
+said. Each works anywhere in the line, stray commas included:
+
+    One week from today ,
+    two weeks from today,
+    one month from today,
+    a month from today
+    In two weeks in,
+    In three weeks
+    In one week
+    In one month
+
+"In two weeks in," has a trailing "in" from dictation, which is dropped
+along with the duration.

@@ -212,7 +212,16 @@
   var MONTH_DATE_RE = new RegExp('\\b' + MONTH_PATTERN + '\\.?[\\s,]+(\\d{1,2})(?:st|nd|rd|th)?\\b(?:[\\s,]+(\\d{4}))?', 'i');
   var NUMERIC_DATE_RE = /\b(\d{1,2})([\/.-])(\d{1,2})\2(\d{2,4})\b/;
   var SPACED_DATE_RE = /^(\d{1,2})\s+(\d{1,2})\s+(\d{2,4})\b/;
-  var DURATION_RE = /^(\S+)\s+(days?|weeks?|months?|years?)\b/i;
+  var DURATION_RE = /^(\S+)\s+(days?|weeks?|months?|years?)\b(?:\s+from\s+(?:today|now|purchase))?/i;
+  // A duration said without "expires" - "in two weeks", "a month from
+  // today". Needs "in" before it or "from today/now" after it: a bare "2
+  // weeks" is left alone, since that could just as well be a quantity.
+  var DURATION_NUMBER = '(\\d+(?:\\.\\d+)?|a|an|' + Object.keys(NUMBER_WORDS).join('|') + ')';
+  var DURATION_UNIT = '(days?|weeks?|months?|years?)';
+  var RELATIVE_DURATION_RES = [
+    new RegExp('\\bin\\s+' + DURATION_NUMBER + '\\s+' + DURATION_UNIT + '\\b(?:\\s+from\\s+(?:today|now|purchase))?(?:[\\s,]+in\\b)?', 'i'),
+    new RegExp('\\b' + DURATION_NUMBER + '\\s+' + DURATION_UNIT + '\\s+from\\s+(?:today|now|purchase)\\b', 'i'),
+  ];
   var EXPIRES_KEYWORD_RE = /\b(?:expires?|expiring|expiration(?:\s+date)?|exp|best\s+by|use\s+by)\b[\s,:]*(?:(?:in|on)\b[\s,]*)?/i;
 
   function validDate(year, monthIndex, day) {
@@ -255,18 +264,24 @@
     }
     m = rest.match(DURATION_RE);
     if (m) {
-      var n = resolveNumberWord(m[1]);
-      if (n !== null) {
-        var base = purchaseDateISO ? new Date(purchaseDateISO + 'T00:00:00') : new Date();
-        var unit = m[2].toLowerCase();
-        if (unit.indexOf('day') === 0) base.setDate(base.getDate() + n);
-        else if (unit.indexOf('week') === 0) base.setDate(base.getDate() + n * 7);
-        else if (unit.indexOf('month') === 0) base.setMonth(base.getMonth() + n);
-        else base.setFullYear(base.getFullYear() + n);
-        return { iso: base.toISOString().slice(0, 10), length: m[0].length };
-      }
+      iso = durationToISO(m[1], m[2], purchaseDateISO);
+      if (iso) return { iso: iso, length: m[0].length };
     }
     return null;
+  }
+
+  // "two" + "weeks" -> the ISO date that long after the purchase date (which
+  // defaults to today, so "from today" and "from purchase" agree).
+  function durationToISO(numberWord, unitWord, purchaseDateISO) {
+    var n = resolveNumberWord(numberWord);
+    if (n === null) return null;
+    var base = purchaseDateISO ? new Date(purchaseDateISO + 'T00:00:00') : new Date();
+    var unit = unitWord.toLowerCase();
+    if (unit.indexOf('day') === 0) base.setDate(base.getDate() + n);
+    else if (unit.indexOf('week') === 0) base.setDate(base.getDate() + n * 7);
+    else if (unit.indexOf('month') === 0) base.setMonth(base.getMonth() + n);
+    else base.setFullYear(base.getFullYear() + n);
+    return formatISODate(base.getFullYear(), base.getMonth(), base.getDate());
   }
 
   // Cuts text[start, end) out and leaves a comma in its place, so whatever
@@ -277,7 +292,8 @@
   }
 
   // Finds the expiration date: "expires <date or duration>" first, then
-  // (no keyword) any unambiguous full date anywhere in the line.
+  // (no keyword) any unambiguous full date anywhere in the line, then a
+  // relative duration ("in two weeks", "a month from today").
   function extractExpiration(text) {
     var purchaseDateISO = document.getElementById('f-purchase').value;
     var kw = text.match(EXPIRES_KEYWORD_RE);
@@ -302,6 +318,13 @@
     if (m) {
       iso = validDate(parseInt(m[4], 10), parseInt(m[1], 10) - 1, parseInt(m[3], 10));
       if (iso) return { text: cutOut(text, m.index, m.index + m[0].length), expiration: iso };
+    }
+    for (var r = 0; r < RELATIVE_DURATION_RES.length; r++) {
+      m = text.match(RELATIVE_DURATION_RES[r]);
+      if (m) {
+        iso = durationToISO(m[1], m[2], purchaseDateISO);
+        if (iso) return { text: cutOut(text, m.index, m.index + m[0].length), expiration: iso };
+      }
     }
     return { text: text, expiration: null };
   }

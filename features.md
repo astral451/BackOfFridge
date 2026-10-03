@@ -219,7 +219,9 @@
   today); "size"/"volume"/"weight" separate a count from a per-item size
   ("quantity two size 24 ounces"), and so does a comma between the two
   numbers ("two, 24 ounces"), whether typed or said as "comma"; location
-  and tag are matched anywhere in the line, not just at the end. Built
+  and tag are matched anywhere in the line, not just at the end; a
+  relative expiration works without "expires" too ("in two weeks", "a
+  month from today"). Built
   against real dictated lines collected in `dictation_examples.md`, which
   also documents the keyword rules. One case stays unfixable by design:
   once dictation has merged "two twenty-four ounces" into "224 ounces",
