@@ -314,6 +314,30 @@ priority — a Low item isn't necessarily more worth doing than a High one.
     Quick Tunnel. Graded High as a whole not because any one piece is
     novel, but because it touches auth again, needs a stable public
     endpoint, and needs an external integration layer all together.
+- **Usage analysis: treat quick "catch-up" bursts as backlog, not
+  real-time consumption (note for any future trends/analytics work).**
+  Real usage pattern: an item logged as 20 units (or 100%) often isn't
+  updated as it's used. Later the user notices it's out of date and taps
+  − five or ten times in a row to catch it up. Each tap is recorded as its
+  own `item_events` row: a `consumed` event with `quantity: 1` for
+  count-tracked items, or a `fill_level_set` event for fill-level items.
+  Read naively, the history says all of that was consumed in the minute
+  the taps happened, when it was actually used gradually over the days or
+  weeks since the previous event.
+
+  Rule of thumb for analysis: several reductions on the same item within
+  a few minutes of each other (say ≤10 minutes between consecutive
+  events) are most likely one catch-up session. Collapse the burst into a
+  single reduction whose total is known but whose timing is only bounded:
+  sometime between the item's previous event and the burst. Don't count
+  it as one moment of consumption. For rates like "how fast does X get
+  used" or "what day does it get consumed", spread the burst's total over
+  that gap, or exclude bursts from timing questions entirely and keep them
+  only for totals.
+  This only needs to inform how queries are written (e.g. a future
+  `common_sql_commands.sh` command or trends UI). Nothing about how events
+  are recorded needs to change, since the timestamps already carry the
+  signal.
 - **Favorites filter** — surface the most-purchased items for quick re-up.
   Now unblocked: `item_events` (shipped above) has a `purchased` event per
   purchase, so this is a `GROUP BY item_name` count over that table filtered
