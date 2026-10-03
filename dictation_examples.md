@@ -74,19 +74,20 @@ came through intact).
 
 ## Keywords: what's needed to always get it right
 
-Principle: commas are ignored entirely (dictation places them unreliably),
-so every field is found either by a keyword or by being unambiguous on its
-own.
+Rules as built in `parseQuickAdd` (`public/app.js`). Commas are mostly
+ignored, because dictation places them unreliably. Every field is found
+either by a keyword or by being unambiguous on its own.
 
 | Field      | Needs a keyword? | Rule |
 |------------|------------------|------|
-| Name       | No  | Whatever's left after every other field is taken out. Say it first. |
+| Name       | No  | The words before the quantity, or before the first comma if that comes sooner. Say it first. |
 | Location   | No  | Matched (fuzzily) against the managed location list, anywhere in the line. |
 | Tag        | No  | Matched against the managed tag list, anywhere in the line. |
-| Expires    | Only for durations | A full date ("May 16, 2027", "05/16/2027") is unambiguous on its own. Since purchase date defaults to today, a bare date means the expiration date. A duration ("2 weeks") still needs "expires" ("expires in 2 weeks"). |
-| Quantity + size | **Yes, when both are spoken** | "quantity two size 24 ounces". "volume" and "weight" are also accepted as alternatives to "size". |
-| Quantity alone  | No  | "Milk 1 gallon" is fine: one number plus a unit. |
+| Expires    | Only for durations / partial dates | A full date ("May 16, 2027", "05/16/2027") is taken as the expiration on its own. Purchase date defaults to today, so a bare date means expiration. A duration ("expires in 2 weeks"), a date without a year ("expires May 16") or space-separated numbers ("expires 10 15 2026") need "expires". "exp", "expiration", "best by" and "use by" also work. |
+| Quantity + size | **Yes, when both are spoken** | "quantity two **size** 24 ounces". "**volume**" and "**weight**" work the same as "size". A comma (typed, or said as "comma") between the two numbers also works: "two, 24 ounces". |
+| Quantity alone  | No  | "Milk 1 gallon" is fine: the first number, plus a unit if one follows. |
+| Notes      | No  | Anything left over after the quantity/size. |
 
-So the only keyword that's *required* is the separator between count and
-size. Everything else is optional, and "expires"/"quantity" still work as
-extra-explicit forms.
+The only keyword that's *required* is the separator between count and size,
+and a comma counts as one. Everything else is optional, and "expires" /
+"quantity" still work as extra-explicit forms.

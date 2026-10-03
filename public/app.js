@@ -127,29 +127,20 @@
     sep: 8, sept: 8, september: 8, oct: 9, october: 9, nov: 10, november: 10,
     dec: 11, december: 11,
   };
-  var QTY_REGEX = /^(\d+(?:\.\d+)?)\s*(.*)$/;
+  // Unit spellings that are already short enough to keep as-is, and
+  // count-style units kept exactly as spoken ("cans", "bags").
+  var UNIT_ABBREVIATIONS = ['oz', 'lb', 'gal', 'qt', 'pt', 'l', 'ml', 'g', 'kg', 'fl'];
+  var COUNT_UNITS = [
+    'cup', 'cups', 'can', 'cans', 'bag', 'bags', 'box', 'boxes', 'bottle', 'bottles',
+    'jar', 'jars', 'pack', 'packs', 'roll', 'rolls', 'loaf', 'loaves', 'bunch', 'bunches',
+    'carton', 'cartons', 'stick', 'sticks', 'piece', 'pieces', 'count', 'ct', 'each',
+  ];
   var FUZZY_THRESHOLD = 0.72;
 
   function joinSplitTeens(text) {
     return text.replace(/\b(two|three|four|five|six|seven|eight|nine)\s+teen\b/gi, function (m, word) {
       return String(TEEN_JOIN_WORDS[word.toLowerCase()]);
     });
-  }
-
-  // Replaces a leading number word ("two" -> "2") and normalizes a trailing
-  // unit word ("ounces" -> "oz") so the existing digit+unit regex below
-  // still does the actual splitting - this only rewrites the words it knows
-  // about and leaves anything else untouched.
-  function normalizeQuickAddSegment(seg) {
-    var words = seg.trim().split(/\s+/);
-    if (words.length && NUMBER_WORDS.hasOwnProperty(words[0].toLowerCase())) {
-      words[0] = String(NUMBER_WORDS[words[0].toLowerCase()]);
-    }
-    var lastWord = words[words.length - 1].toLowerCase();
-    if (UNIT_WORDS.hasOwnProperty(lastWord)) {
-      words[words.length - 1] = UNIT_WORDS[lastWord];
-    }
-    return words.join(' ');
   }
 
   // Resolves "one"/"a"/"14" (already joined by joinSplitTeens if it was
@@ -209,76 +200,214 @@
     return year + '-' + mm + '-' + dd;
   }
 
-  // Parses an "expires ..." phrase into an ISO date: a duration relative to
-  // the purchase date ("1 week"), a month-name date ("August 10th 2026"),
-  // or a numeric month/day/year date ("08 10 2026") - matching this app's
-  // own <input type="date"> fields, month before day. Returns null on
-  // anything else, rather than guessing wrong.
-  function parseExpirationPhrase(phrase, purchaseDateISO) {
-    phrase = phrase.trim();
-    if (!phrase) return null;
+  // Date shapes the parser recognizes. A month-name date or a slashed/dashed
+  // numeric date with a year is unambiguous on its own, so it's taken as the
+  // expiration date even without "expires" (the purchase date already
+  // defaults to today, so a bare date in a quick-add line is almost always
+  // the expiration). Commas are allowed between the parts because dictation
+  // drops them in unpredictably ("October, 10th 2026"). The looser shapes -
+  // a year-less month date, space-separated numbers, a duration - are only
+  // trusted right after an "expires" keyword.
+  var MONTH_PATTERN = '(' + Object.keys(MONTH_NAMES).sort(function (a, b) { return b.length - a.length; }).join('|') + ')';
+  var MONTH_DATE_RE = new RegExp('\\b' + MONTH_PATTERN + '\\.?[\\s,]+(\\d{1,2})(?:st|nd|rd|th)?\\b(?:[\\s,]+(\\d{4}))?', 'i');
+  var NUMERIC_DATE_RE = /\b(\d{1,2})([\/.-])(\d{1,2})\2(\d{2,4})\b/;
+  var SPACED_DATE_RE = /^(\d{1,2})\s+(\d{1,2})\s+(\d{2,4})\b/;
+  var DURATION_RE = /^(\S+)\s+(days?|weeks?|months?|years?)\b/i;
+  var EXPIRES_KEYWORD_RE = /\b(?:expires?|expiring|expiration(?:\s+date)?|exp|best\s+by|use\s+by)\b[\s,:]*(?:(?:in|on)\b[\s,]*)?/i;
 
-    var durationMatch = phrase.match(/^(\S+)\s*(day|days|week|weeks|month|months|year|years)$/i);
-    if (durationMatch) {
-      var n = resolveNumberWord(durationMatch[1]);
+  function validDate(year, monthIndex, day) {
+    if (year < 100) year += 2000;
+    if (monthIndex < 0 || monthIndex > 11 || day < 1 || day > 31) return null;
+    return formatISODate(year, monthIndex, day);
+  }
+
+  // A year-less "May 16" means the next May 16 on or after the purchase
+  // date, so it never lands in the past.
+  function monthDateToISO(m, purchaseDateISO) {
+    var monthIndex = MONTH_NAMES[m[1].toLowerCase()];
+    var day = parseInt(m[2], 10);
+    if (m[3]) return validDate(parseInt(m[3], 10), monthIndex, day);
+    var base = purchaseDateISO ? new Date(purchaseDateISO + 'T00:00:00') : new Date();
+    var iso = validDate(base.getFullYear(), monthIndex, day);
+    if (iso && iso < formatISODate(base.getFullYear(), base.getMonth(), base.getDate())) {
+      iso = validDate(base.getFullYear() + 1, monthIndex, day);
+    }
+    return iso;
+  }
+
+  // Tries every date shape against the start of `rest` (the text right
+  // after an "expires" keyword). Returns { iso, length } or null.
+  function parseDateAfterKeyword(rest, purchaseDateISO) {
+    var m = rest.match(new RegExp('^' + MONTH_DATE_RE.source.slice(2), 'i'));
+    if (m) {
+      var iso = monthDateToISO(m, purchaseDateISO);
+      if (iso) return { iso: iso, length: m[0].length };
+    }
+    m = rest.match(new RegExp('^' + NUMERIC_DATE_RE.source.slice(2)));
+    if (m) {
+      iso = validDate(parseInt(m[4], 10), parseInt(m[1], 10) - 1, parseInt(m[3], 10));
+      if (iso) return { iso: iso, length: m[0].length };
+    }
+    m = rest.match(SPACED_DATE_RE);
+    if (m) {
+      iso = validDate(parseInt(m[3], 10), parseInt(m[1], 10) - 1, parseInt(m[2], 10));
+      if (iso) return { iso: iso, length: m[0].length };
+    }
+    m = rest.match(DURATION_RE);
+    if (m) {
+      var n = resolveNumberWord(m[1]);
       if (n !== null) {
         var base = purchaseDateISO ? new Date(purchaseDateISO + 'T00:00:00') : new Date();
-        var unit = durationMatch[2].toLowerCase();
+        var unit = m[2].toLowerCase();
         if (unit.indexOf('day') === 0) base.setDate(base.getDate() + n);
         else if (unit.indexOf('week') === 0) base.setDate(base.getDate() + n * 7);
         else if (unit.indexOf('month') === 0) base.setMonth(base.getMonth() + n);
         else base.setFullYear(base.getFullYear() + n);
-        return base.toISOString().slice(0, 10);
+        return { iso: base.toISOString().slice(0, 10), length: m[0].length };
       }
     }
-
-    var monthNameMatch = phrase.match(/^([a-zA-Z]+)\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})$/);
-    if (monthNameMatch && MONTH_NAMES.hasOwnProperty(monthNameMatch[1].toLowerCase())) {
-      var day1 = parseInt(monthNameMatch[2], 10);
-      if (day1 >= 1 && day1 <= 31) {
-        return formatISODate(parseInt(monthNameMatch[3], 10), MONTH_NAMES[monthNameMatch[1].toLowerCase()], day1);
-      }
-    }
-
-    var numericMatch = phrase.match(/^(\d{1,2})[\s\/-](\d{1,2})[\s\/-](\d{2,4})$/);
-    if (numericMatch) {
-      var mm = parseInt(numericMatch[1], 10);
-      var dd = parseInt(numericMatch[2], 10);
-      var yyyy = parseInt(numericMatch[3], 10);
-      if (yyyy < 100) yyyy += 2000;
-      if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
-        return formatISODate(yyyy, mm - 1, dd);
-      }
-    }
-
     return null;
   }
 
-  // Finds "expires"/"expiration"/"exp" (optionally followed by "in"/"on"/
-  // ":") and strips it plus everything up to the next comma (or the end of
-  // the string) out of `text`, handing that phrase to parseExpirationPhrase.
-  // The trailing `(,\s*\d{4})?` covers dictation that writes a "Month Day,
-  // Year" date with the comma landing mid-date ("May 29, 2028") rather than
-  // as a real separator - without it, `[^,]*` alone stops right before the
-  // year and the date never parses.
-  function extractExpiration(text) {
-    var match = text.match(/\b(?:expires?|expiration|exp)\b\s*(?:in|on|:)?\s*([^,]*(?:,\s*\d{4})?)/i);
-    if (!match) return { text: text, expiration: null };
-    var expiration = parseExpirationPhrase(match[1], document.getElementById('f-purchase').value);
-    var cleaned = text.slice(0, match.index) + text.slice(match.index + match[0].length);
-    return { text: cleaned.trim(), expiration: expiration };
+  // Cuts text[start, end) out and leaves a comma in its place, so whatever
+  // was on either side of a removed phrase is never read as one run of
+  // words (e.g. a location split across it).
+  function cutOut(text, start, end) {
+    return text.slice(0, start) + ' , ' + text.slice(end);
   }
 
-  // Finds an explicit "quantity <value>" keyword phrase and strips it out,
-  // so "Raw carrots quantity 1, 5 pounds, ..." sets quantity from the
-  // keyword rather than from the "5 pounds" segment later.
+  // Finds the expiration date: "expires <date or duration>" first, then
+  // (no keyword) any unambiguous full date anywhere in the line.
+  function extractExpiration(text) {
+    var purchaseDateISO = document.getElementById('f-purchase').value;
+    var kw = text.match(EXPIRES_KEYWORD_RE);
+    if (kw) {
+      var restStart = kw.index + kw[0].length;
+      var parsed = parseDateAfterKeyword(text.slice(restStart), purchaseDateISO);
+      if (parsed) {
+        return { text: cutOut(text, kw.index, restStart + parsed.length), expiration: parsed.iso };
+      }
+      // Keyword with nothing recognizable after it - drop just the keyword
+      // and let the rest fall through (it ends up in name or notes, where
+      // it's visible on the review form, rather than silently vanishing).
+      text = cutOut(text, kw.index, restStart);
+    }
+
+    var m = text.match(MONTH_DATE_RE);
+    if (m && m[3]) {
+      var iso = monthDateToISO(m, purchaseDateISO);
+      if (iso) return { text: cutOut(text, m.index, m.index + m[0].length), expiration: iso };
+    }
+    m = text.match(NUMERIC_DATE_RE);
+    if (m) {
+      iso = validDate(parseInt(m[4], 10), parseInt(m[1], 10) - 1, parseInt(m[3], 10));
+      if (iso) return { text: cutOut(text, m.index, m.index + m[0].length), expiration: iso };
+    }
+    return { text: text, expiration: null };
+  }
+
+  // Number words accepted when scanning a line for a quantity. "half",
+  // "quarter" and "dozen" are left out here (still fine after an explicit
+  // "quantity" keyword) because they show up in ordinary item names
+  // ("half and half") far more often than as a spoken count.
+  function scanNumber(token) {
+    if (/^\d+(?:\.\d+)?$/.test(token)) return parseFloat(token);
+    var lower = token.toLowerCase();
+    if (NUMBER_WORDS.hasOwnProperty(lower) && ['half', 'quarter', 'dozen'].indexOf(lower) === -1) {
+      return NUMBER_WORDS[lower];
+    }
+    return null;
+  }
+
+  // Abbreviates a spoken unit ("ounces" -> "oz"), keeps a known count-style
+  // unit as spoken ("cans"), or returns null for anything that isn't a unit.
+  function normalizeUnit(word) {
+    if (!word) return null;
+    var lower = word.toLowerCase().replace(/\.$/, '');
+    if (UNIT_WORDS.hasOwnProperty(lower)) return UNIT_WORDS[lower];
+    if (UNIT_ABBREVIATIONS.indexOf(lower) !== -1) return lower === 'l' ? 'L' : lower === 'ml' ? 'mL' : lower;
+    if (COUNT_UNITS.indexOf(lower) !== -1) return lower;
+    return null;
+  }
+
+  // "24oz"/"5lb" written as one token -> { number, unit }, else null.
+  function splitAttachedUnit(token) {
+    var m = token.match(/^(\d+(?:\.\d+)?)([a-zA-Z]+\.?)$/);
+    if (!m) return null;
+    var unit = normalizeUnit(m[2]);
+    return unit ? { number: parseFloat(m[1]), unit: unit } : null;
+  }
+
+  // Reads "<number> [unit]" (or one "24oz" token) at the start of `s`, for
+  // the phrase right after a quantity/size keyword. Returns { number, unit,
+  // length } or null.
+  function readNumberAndUnit(s) {
+    var m = s.match(/^(\S+?)(?=[\s,]|$)(?:\s+([a-zA-Z]+\.?)(?=[\s,]|$))?/);
+    if (!m) return null;
+    var attached = splitAttachedUnit(m[1]);
+    if (attached) return { number: attached.number, unit: attached.unit, length: m[1].length };
+    var n = resolveNumberWord(m[1]);
+    if (n === null || m[1].toLowerCase() === 'a' || m[1].toLowerCase() === 'an') return null;
+    var unit = normalizeUnit(m[2]);
+    return { number: n, unit: unit, length: unit ? m[0].length : m[1].length };
+  }
+
+  // "quantity two" sets the count. A unit straight after it ("quantity 224
+  // ounces") is kept as that count's unit.
   function extractQuantityKeyword(text) {
-    var match = text.match(/\bquantity\b\s*[:]?\s*([^\s,]+)/i);
-    if (!match) return { text: text, quantity: null };
-    var value = resolveNumberWord(match[1]);
-    if (value === null) return { text: text, quantity: null };
-    var cleaned = text.slice(0, match.index) + text.slice(match.index + match[0].length);
-    return { text: cleaned.trim(), quantity: value };
+    var kw = text.match(/\bquantity\b[\s,:]*/i);
+    if (!kw) return { text: text, quantity: null, unit: null };
+    var read = readNumberAndUnit(text.slice(kw.index + kw[0].length));
+    if (!read) return { text: text, quantity: null, unit: null };
+    return {
+      text: cutOut(text, kw.index, kw.index + kw[0].length + read.length),
+      quantity: read.number,
+      unit: read.unit,
+    };
+  }
+
+  // "size/volume/weight 24 ounces" sets the per-item size, kept in the unit
+  // field as one string ("24 oz") - the same convention "1 5lb" already
+  // used. The keyword is what keeps a spoken "two ... twenty four ounces"
+  // from being merged by dictation into "224 ounces".
+  function extractSizeKeyword(text) {
+    var kw = text.match(/\b(?:size|volume|weight)\b[\s,:]*/i);
+    if (!kw) return { text: text, size: null };
+    var read = readNumberAndUnit(text.slice(kw.index + kw[0].length));
+    if (!read) return { text: text, size: null };
+    return {
+      text: cutOut(text, kw.index, kw.index + kw[0].length + read.length),
+      size: read.number + (read.unit ? ' ' + read.unit : ''),
+    };
+  }
+
+  // Best fuzzy match for any run of up to maxWords unused tokens against a
+  // managed list (locations/tags), anywhere in the line - not just at the
+  // end, so "kitchen fridge yogurt" works as well as "yogurt kitchen
+  // fridge". A run never crosses a comma or starts on a number. Marks the
+  // matched tokens used and returns the list entry, or ''.
+  function takeListMatch(tokens, used, list, maxWords) {
+    var best = null;
+    for (var w = maxWords; w >= 1; w--) {
+      for (var start = tokens.length - w; start >= 0; start--) {
+        var ok = !/^\d/.test(tokens[start]);
+        for (var k = start; ok && k < start + w; k++) {
+          if (used[k] || tokens[k] === ',') ok = false;
+        }
+        if (!ok) continue;
+        var phrase = tokens.slice(start, start + w).join(' ');
+        list.forEach(function (entry) {
+          var score = similarity(phrase, entry);
+          // Strictly better only: ties keep the longer, later run found first.
+          if (score >= FUZZY_THRESHOLD && (!best || score > best.score)) {
+            best = { entry: entry, start: start, w: w, score: score };
+          }
+        });
+      }
+    }
+    if (!best) return '';
+    for (var i = best.start; i < best.start + best.w; i++) used[i] = true;
+    return best.entry;
   }
 
   // Heuristic parser for the quick-add box. Dictation itself needs no app
@@ -287,25 +416,32 @@
   // form fields. Deliberately does NOT submit anything itself - it only
   // pre-fills the existing detailed form for the user to review/adjust.
   //
-  // Commas are treated as absolute separators when present (segment 0 is
-  // always the name). Without a comma - or a dropped one - falls back to a
-  // space-tokenized pass that works from the outer boundaries inward: strip
-  // a trailing location match, then a trailing tag match, then a trailing
-  // quantity/unit match, and whatever's left at the front is the name. This
-  // is what keeps "Raw carrots 1 5lb kitchen fridge" and "Raw carrots
-  // quantity 1, 5 pounds, kitchen fridge" landing on the same parsed result.
+  // Dictation places commas unreliably, so a comma is never what decides
+  // which field is which. Each field is found by a keyword or by being
+  // unambiguous on its own (see dictation_examples.md for the real lines
+  // this was built against):
+  //   - expiration: "expires ..." or any full date ("May 16, 2027")
+  //   - quantity: "quantity two", or the first number in the line
+  //   - size: "size/volume/weight 24 ounces", or a second number right
+  //     after the count ("1 5lb", "two, 24 ounces") - a comma, typed or
+  //     spoken as "comma", between two numbers marks exactly that split
+  //   - location/tag: fuzzy-matched against the managed lists, anywhere
+  //   - name: the words before the quantity (or before the first comma, if
+  //     sooner); anything after it is notes
   function parseQuickAdd(text) {
     text = joinSplitTeens(text.trim());
+    text = text.replace(/\s*\bcomma\b\s*/gi, ', ');
 
     var expirationResult = extractExpiration(text);
     text = expirationResult.text;
-
     var quantityResult = extractQuantityKeyword(text);
     text = quantityResult.text;
+    var sizeResult = extractSizeKeyword(text);
+    text = sizeResult.text;
 
     var result = {
-      name: '', quantity: quantityResult.quantity, unit: '', location: '', tag: '',
-      notes: '', expiration: expirationResult.expiration,
+      name: '', quantity: quantityResult.quantity, unit: sizeResult.size || quantityResult.unit || '',
+      location: '', tag: '', notes: '', expiration: expirationResult.expiration,
     };
 
     var locations = Array.prototype.map.call(document.querySelectorAll('#f-location-select option'), function (o) { return o.value; })
@@ -313,110 +449,98 @@
     var tags = Array.prototype.map.call(document.querySelectorAll('#f-tag-select option'), function (o) { return o.value; })
       .filter(function (v) { return v && v !== '__new__'; });
 
-    if (text.indexOf(',') !== -1) {
-      var segments = text.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
-      if (!segments.length) return result;
-      result.name = segments[0];
+    var tokens = text.replace(/,/g, ' , ').split(/\s+/).filter(Boolean);
+    var used = tokens.map(function () { return false; });
 
-      var leftover = [];
-      for (var i = 1; i < segments.length; i++) {
-        var seg = normalizeQuickAddSegment(segments[i]);
-        var qtyMatch = seg.match(QTY_REGEX);
-        var matchedLocation = fuzzyMatch(segments[i], locations);
-        var matchedTag = fuzzyMatch(segments[i], tags);
+    result.location = takeListMatch(tokens, used, locations, 3);
+    result.tag = takeListMatch(tokens, used, tags, 2);
 
-        if (qtyMatch && result.quantity === null) {
-          result.quantity = parseFloat(qtyMatch[1]);
-          result.unit = qtyMatch[2].trim();
-        } else if (qtyMatch && !result.unit) {
-          // Quantity already known (explicit "quantity" keyword) - this
-          // segment is a pure unit descriptor, kept as one string ("5 lb").
-          result.unit = seg;
-        } else if (matchedLocation && !result.location) {
-          result.location = matchedLocation;
-        } else if (matchedTag && !result.tag) {
-          result.tag = matchedTag;
-        } else {
-          leftover.push(segments[i]);
-        }
-      }
-      result.notes = leftover.join(', ');
-    } else if (text) {
-      var tokens = text.split(/\s+/).filter(Boolean);
+    // The first number in what's left is the quantity (or, with "quantity"
+    // already given, a size). What immediately follows decides the rest.
+    var qtyStart = -1;
+    var qtyEnd = -1;
+    for (var i = 0; i < tokens.length && qtyStart === -1; i++) {
+      if (used[i] || tokens[i] === ',') continue;
+      if (scanNumber(tokens[i]) !== null || splitAttachedUnit(tokens[i])) qtyStart = i;
+    }
 
-      // A window starting on a numeric-looking token ("5lb kitchen fridge")
-      // is never a real location/tag name - skipping it stops a longer
-      // window from scoring deceptively well against a real location just
-      // because Levenshtein similarity is lenient on a short prefix addition.
-      function startsNumeric(startIdx) {
-        return /^\d/.test(tokens[startIdx]);
-      }
-
-      for (var w = Math.min(3, tokens.length); w >= 1 && !result.location; w--) {
-        var locStart = tokens.length - w;
-        if (startsNumeric(locStart)) continue;
-        var loc = fuzzyMatch(tokens.slice(locStart).join(' '), locations);
-        if (loc) {
-          result.location = loc;
-          tokens = tokens.slice(0, locStart);
-        }
-      }
-
-      for (var w2 = Math.min(2, tokens.length); w2 >= 1 && !result.tag; w2--) {
-        var tagStart = tokens.length - w2;
-        if (startsNumeric(tagStart)) continue;
-        var tag = fuzzyMatch(tokens.slice(tagStart).join(' '), tags);
-        if (tag) {
-          result.tag = tag;
-          tokens = tokens.slice(0, tagStart);
+    if (qtyStart !== -1) {
+      var number;
+      var unit = null;
+      var size = null;
+      var attached = splitAttachedUnit(tokens[qtyStart]);
+      qtyEnd = qtyStart + 1;
+      if (attached) {
+        number = attached.number;
+        unit = attached.unit;
+      } else {
+        number = scanNumber(tokens[qtyStart]);
+        // A second number right after the first - directly, or after a
+        // comma - is a size: "1 5lb", "two 24 ounces", "2, 24 ounces".
+        var j = qtyEnd;
+        if (tokens[j] === ',' && !used[j]) j++;
+        var nextAttached = j < tokens.length && !used[j] ? splitAttachedUnit(tokens[j]) : null;
+        var nextNumber = j < tokens.length && !used[j] ? scanNumber(tokens[j]) : null;
+        if (nextAttached) {
+          size = nextAttached.number + ' ' + nextAttached.unit;
+          qtyEnd = j + 1;
+        } else if (nextNumber !== null) {
+          var sizeUnit = j + 1 < tokens.length && !used[j + 1] ? normalizeUnit(tokens[j + 1]) : null;
+          size = nextNumber + (sizeUnit ? ' ' + sizeUnit : '');
+          qtyEnd = sizeUnit ? j + 2 : j + 1;
+        } else if (qtyEnd < tokens.length && !used[qtyEnd] && tokens[qtyEnd] !== ',') {
+          unit = normalizeUnit(tokens[qtyEnd]);
+          // An unrecognized word is still taken as the unit when it's the
+          // last thing left ("yogurt 4 tubs") - otherwise it's notes.
+          var isLast = true;
+          for (var k = qtyEnd + 1; k < tokens.length; k++) {
+            if (!used[k] && tokens[k] !== ',') isLast = false;
+          }
+          if (!unit && isLast) unit = tokens[qtyEnd];
+          if (unit) qtyEnd++;
         }
       }
 
-      // Smallest window first: a single trailing token ("5lb", a bare "3")
-      // is checked before a 2-token phrase ("5 pounds") - otherwise a
-      // 2-token window would too eagerly swallow a separate leading
-      // quantity ("1 5lb") as one spurious quantity+unit match instead of
-      // leaving "1" for the preceding-token check below to find.
-      var qtyFound = null;
-      var qtyConsumed = 0;
-      for (var w3 = 1; w3 <= Math.min(2, tokens.length) && !qtyFound; w3++) {
-        var qtyCandidate = normalizeQuickAddSegment(tokens.slice(tokens.length - w3).join(' '));
-        var m = qtyCandidate.match(QTY_REGEX);
-        if (m) {
-          qtyFound = { number: parseFloat(m[1]), unit: m[2].trim() };
-          qtyConsumed = w3;
-        }
+      if (size) {
+        if (result.quantity === null) result.quantity = number;
+        if (!sizeResult.size) result.unit = size;
+      } else if (result.quantity === null) {
+        result.quantity = number;
+        if (unit && !result.unit) result.unit = unit;
+      } else if (!result.unit) {
+        // "quantity 1, 5 pounds" - the count was already given, so this
+        // number is the size.
+        result.unit = number + (unit ? ' ' + unit : '');
       }
+      for (var u = qtyStart; u < qtyEnd; u++) used[u] = true;
+    }
 
-      if (qtyFound) {
-        tokens = tokens.slice(0, tokens.length - qtyConsumed);
-        var qtyDisplay = qtyFound.unit ? (qtyFound.number + ' ' + qtyFound.unit) : String(qtyFound.number);
-
-        // A separate bare number immediately before the match ("1 5lb") is
-        // the real quantity, with the matched number+unit becoming the unit
-        // description instead of overwriting it - only the immediately
-        // preceding token is checked, not the whole name, to avoid an
-        // ordinary name word being mistaken for a count.
-        var precedingVal = tokens.length ? resolveNumberWord(tokens[tokens.length - 1]) : null;
-
-        if (result.quantity === null && precedingVal !== null && qtyFound.unit) {
-          result.quantity = precedingVal;
-          result.unit = qtyDisplay;
-          tokens = tokens.slice(0, tokens.length - 1);
-        } else if (result.quantity === null) {
-          result.quantity = qtyFound.number;
-          result.unit = qtyFound.unit;
-        } else {
-          result.unit = qtyDisplay;
-        }
-      }
-
-      result.name = tokens.join(' ');
+    // The name ends at the quantity, or at the first comma after it starts
+    // if that comes sooner ("Peanut butter, pantry, organic crunchy").
+    var nameEnd = qtyStart === -1 ? tokens.length : qtyStart;
+    var nameStarted = false;
+    for (var n = 0; n < nameEnd; n++) {
+      if (tokens[n] === ',' && nameStarted) nameEnd = n;
+      else if (!used[n] && tokens[n] !== ',') nameStarted = true;
+    }
+    var before = [];
+    var after = [];
+    tokens.forEach(function (tok, idx) {
+      if (used[idx] || tok === ',') return;
+      if (idx < nameEnd) before.push(tok);
+      else after.push(tok);
+    });
+    result.name = before.join(' ');
+    result.notes = after.join(' ');
+    if (!result.name) {
+      // "2 gallons milk" - nothing before the quantity, so what follows is
+      // the name rather than notes.
+      result.name = result.notes;
+      result.notes = '';
     }
 
     return result;
   }
-
   // Pre-fills the purchase form from a parsed quick-add line and opens the
   // sheet for review - mirrors fillFormFromItem's "pre-fill, don't submit"
   // behavior, but only touches fields the parser actually found something
