@@ -212,7 +212,13 @@
   burst's tap count, total reduced, and days since the item's previous
   event. Its thresholds are tunable with `BURST_MINUTES` (default 10) and
   `BURST_MIN_TAPS` (default 3). `items` lists every item's current state: amount,
-  status, and whether it's active, sorted A-Z by name. Run with no arguments to list the
+  status, and whether it's active, sorted A-Z by name. `by-name` adds up every
+  entry with the same name (case-insensitive, outer spaces ignored) into
+  one row per product: entries, active entries, on hand, times purchased,
+  consumed (including downward quick-sets, excluding anything undone),
+  thrown out, and last used. Each purchase stays its own item with its own
+  expiration in the app; this grouping only exists for consumption
+  questions, where every "Grape Waterloo" is the same thing. Run with no arguments to list the
   available commands (works even without `sqlite3` installed or a database
   present yet, checked before either of those).
 - Dictation-resilient quick-add parsing — `parseQuickAdd` (`public/app.js`)
