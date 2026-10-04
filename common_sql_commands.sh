@@ -11,6 +11,7 @@
 #   ./common_sql_commands.sh recent           # last 50 events
 #   ./common_sql_commands.sh consumed-vs-thrown  # consumed vs thrown-out counts
 #   ./common_sql_commands.sh catch-up         # bursts of quick reductions
+#   ./common_sql_commands.sh items            # every item, and whether it's active
 #
 # catch-up finds rapid runs of reductions on one item (several - taps a
 # few minutes apart) - almost always catching the app up on consumption
@@ -39,6 +40,7 @@ print_usage() {
   echo "  recent               Last 50 events across all items"
   echo "  consumed-vs-thrown   Consumed vs thrown-out counts"
   echo "  catch-up             Bursts of quick reductions (catch-up, not real-time use)"
+  echo "  items                Every item and whether it's active (active first)"
 }
 
 query=""
@@ -54,6 +56,19 @@ case "${1:-}" in
     ;;
   consumed-vs-thrown)
     query="SELECT event_type, COUNT(*) AS count FROM item_events WHERE event_type IN ('consumed','thrown_out') GROUP BY event_type;"
+    ;;
+  items)
+    # Reads the items table itself (current state), not item_events.
+    # Amount shows the fill level for fill-tracked items, otherwise the
+    # count + unit. Active items first, then by location and name.
+    query="
+SELECT id, name, location,
+  CASE WHEN tracking_mode = 'fill_level' THEN printf('%g', COALESCE(fill_percent, 100)) || '%'
+       ELSE TRIM(printf('%g', quantity) || ' ' || COALESCE(unit, '')) END AS amount,
+  CASE WHEN status = 'active' THEN 'yes' ELSE 'no' END AS active,
+  status, expiration_date AS expires
+FROM items
+ORDER BY status <> 'active', location COLLATE NOCASE, name COLLATE NOCASE;"
     ;;
   catch-up)
     BURST_MINUTES="${BURST_MINUTES:-10}"
