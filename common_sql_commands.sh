@@ -40,7 +40,7 @@ print_usage() {
   echo "  recent               Last 50 events across all items"
   echo "  consumed-vs-thrown   Consumed vs thrown-out counts"
   echo "  catch-up             Bursts of quick reductions (catch-up, not real-time use)"
-  echo "  items                Every item and whether it's active (active first)"
+  echo "  items                Every item A-Z and whether it's active"
 }
 
 query=""
@@ -60,15 +60,15 @@ case "${1:-}" in
   items)
     # Reads the items table itself (current state), not item_events.
     # Amount shows the fill level for fill-tracked items, otherwise the
-    # count + unit. Active items first, then by location and name.
+    # count + unit. Sorted A-Z by name.
     query="
-SELECT id, name, location,
+SELECT name, location,
   CASE WHEN tracking_mode = 'fill_level' THEN printf('%g', COALESCE(fill_percent, 100)) || '%'
        ELSE TRIM(printf('%g', quantity) || ' ' || COALESCE(unit, '')) END AS amount,
   CASE WHEN status = 'active' THEN 'yes' ELSE 'no' END AS active,
-  status, expiration_date AS expires
+  status, expiration_date AS expires, id
 FROM items
-ORDER BY status <> 'active', location COLLATE NOCASE, name COLLATE NOCASE;"
+ORDER BY name COLLATE NOCASE, id;"
     ;;
   catch-up)
     BURST_MINUTES="${BURST_MINUTES:-10}"

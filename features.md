@@ -212,7 +212,7 @@
   burst's tap count, total reduced, and days since the item's previous
   event. Its thresholds are tunable with `BURST_MINUTES` (default 10) and
   `BURST_MIN_TAPS` (default 3). `items` lists every item's current state: amount,
-  status, and whether it's active, with active items first. Run with no arguments to list the
+  status, and whether it's active, sorted A-Z by name. Run with no arguments to list the
   available commands (works even without `sqlite3` installed or a database
   present yet, checked before either of those).
 - Dictation-resilient quick-add parsing — `parseQuickAdd` (`public/app.js`)
