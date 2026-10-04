@@ -72,6 +72,7 @@ db.exec(`
 // location automatically, matching the "+ Add new location" flow in the
 // purchase form.
 function ensureLocation(name) {
+  name = typeof name === 'string' ? name.trim() : name;
   if (name) {
     db.prepare('INSERT OR IGNORE INTO locations (name) VALUES (?)').run(name);
   }
@@ -159,6 +160,7 @@ db.exec(`
 `);
 
 function ensureTag(name) {
+  name = typeof name === 'string' ? name.trim() : name;
   if (name) {
     db.prepare('INSERT OR IGNORE INTO tags (name) VALUES (?)').run(name);
   }

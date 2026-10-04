@@ -254,6 +254,18 @@
   moment. `common_sql_commands.sh catch-up` lists downward recounts
   alongside tap bursts (`via` column). Main inventory page only, for now;
   At a Glance still has just −/+.
+- Leading/trailing spaces are stripped from item text fields (name,
+  location, tag, unit, notes), so an accidental space before or after a
+  name no longer makes " Orange Cream Bubly" a different item from
+  "Orange Cream Bubly" in search, sorting and purchase counts. This is
+  done twice: in the browser (quick-add parse results, the purchase/edit
+  form on save, and Buy again/Edit pre-fills), and again on the server
+  for every create and edit (`trimTextFields` in
+  `server/src/routes/items.js`, plus `ensureLocation`/`ensureTag`), so the
+  API is covered even when called directly. A name that's only spaces is
+  rejected in both places. This applies to new entries and edits only:
+  existing rows aren't rewritten, though opening one in Edit and saving
+  cleans it up.
 - Fix: the "⋯" row menu opens upward when there isn't room below it. On
   the last rows of the list it used to open under the fixed quick-add bar,
   leaving its actions untappable.

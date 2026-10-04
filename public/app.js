@@ -79,7 +79,7 @@
   function fillFormFromItem(item) {
     openSheet();
     setAddMode();
-    document.getElementById('f-name').value = item.name;
+    document.getElementById('f-name').value = (item.name || '').trim();
     document.getElementById('f-category').value = item.category;
     document.getElementById('f-location-select').value = item.location;
     document.getElementById('f-location-new').classList.add('hidden');
@@ -565,6 +565,9 @@
       result.name = result.notes;
       result.notes = '';
     }
+    result.name = result.name.trim();
+    result.notes = result.notes.trim();
+    result.unit = String(result.unit).trim();
 
     return result;
   }
@@ -648,7 +651,7 @@
     editingItemId = item.id;
     editingTrackingMode = item.tracking_mode;
 
-    document.getElementById('f-name').value = item.name;
+    document.getElementById('f-name').value = (item.name || '').trim();
     document.getElementById('f-category').value = item.category;
     document.getElementById('f-location-select').value = item.location;
     document.getElementById('f-location-new').classList.add('hidden');
@@ -1290,15 +1293,21 @@
 
   document.getElementById('itemForm').addEventListener('submit', function (e) {
     e.preventDefault();
+    // Stray spaces before/after a typed or dictated value are stripped
+    // here (the server strips them again, as a second line of defence).
     var payload = {
-      name: document.getElementById('f-name').value,
+      name: document.getElementById('f-name').value.trim(),
       category: document.getElementById('f-category').value,
-      location: currentFormLocation(),
-      tag: currentFormTag(),
+      location: currentFormLocation().trim(),
+      tag: currentFormTag().trim(),
       purchase_date: document.getElementById('f-purchase').value || null,
       expiration_date: document.getElementById('f-expiration').value || null,
-      notes: document.getElementById('f-notes').value,
+      notes: document.getElementById('f-notes').value.trim(),
     };
+    if (!payload.name) {
+      alert('Enter an item name.');
+      return;
+    }
     if (editingItemId && editingTrackingMode === 'fill_level') {
       var pct = parseFloat(document.getElementById('f-fillpercent').value);
       if (!(pct >= 0 && pct <= 100)) {
@@ -1308,7 +1317,7 @@
       payload.fill_percent = pct;
     } else {
       payload.quantity = parseFloat(document.getElementById('f-quantity').value) || 1;
-      payload.unit = document.getElementById('f-unit').value;
+      payload.unit = document.getElementById('f-unit').value.trim();
     }
 
     var request = editingItemId
