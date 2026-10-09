@@ -173,26 +173,88 @@ probed.
 6. **Then the ops scripts**: the household filter in
    `common_sql_commands.sh`, and the household in log lines.
 
-### Decisions to confirm with the user before coding
+### Decisions (confirmed with the user, 2026-10-09)
 
-Each has a suggested default; ask rather than assume.
+The user answered these directly; build to them rather than re-asking.
+The few points still awaiting a yes are marked.
 
-- **One household per user, or several?** Default: one (a `household_id`
-  on `users`), which is much simpler. A membership table is only needed
-  if one person should switch between, say, their own home and a
-  parent's.
-- **How people join.** Default: an invite code shown on Settings, entered
-  at signup. No email, so no mail server.
-- **Open signup.** Default: signup without an invite code creates a new,
-  empty household. An alternative is an env var such as
-  `ALLOW_NEW_HOUSEHOLDS=false` to close signup entirely on a private
-  deployment.
-- **Roles.** Default: none, every member is equal. Ask whether anyone
-  should be able to remove members or rotate the invite code exclusively.
-- **Name of the default household** that existing data migrates into,
-  e.g. "Home".
-- **Data the user may want shared across households.** Probably nothing,
-  but confirm. Per-household locations and tags is the plan.
+- **One person belongs to one household.** Use a `household_id` column on
+  `users`, not a membership table.
+- **New households come from the admin.** The admin issues a
+  *new-household invite code*. Whoever redeems it at signup names the
+  household and becomes its first member. This is the "new household
+  option" the user asked for, while keeping household creation gated by
+  the admin.
+- **Joining an existing household uses that household's invite code**,
+  shown on its Settings page.
+- **Signup without a code becomes a pending account**, not a disallowed
+  one. The user asked whether this could notify an admin to let them in.
+  The approach proposed, pending the user's yes:
+  - Create the account with `users.status = 'pending'`. It can't reach
+    any data and sees a "waiting for approval" page.
+  - The admin page shows a pending count and a list. For each account the
+    admin can approve it into a new household (the admin names it),
+    approve it into an existing household, or reject it.
+  - The notification is in-app only (no mail server), plus a server log
+    line.
+
+  If that turns out to be too complicated, the user's fallback is to
+  disallow code-less signup entirely.
+- **The admin is system-wide**, over all households (a separate
+  `users.is_admin` flag, not a household role).
+- **Permissions are universal within a household for now**: every member
+  can change items, locations and tags. But the structure must exist for
+  finer permissions later:
+  - a household role column on `users` (`household_role`, default
+    `'member'`);
+  - every mutating route goes through one central check (e.g.
+    `can(req.user, 'items:write')`), which today returns true for any
+    active member.
+
+  Adding permissions later should then mean changing that one function
+  and the roles, not touching every route.
+- **The admin account: a separate, dedicated login.** Proposed, pending
+  the user's yes:
+  - Don't promote one of the everyday household logins. A lost phone with
+    a 30-day session shouldn't carry system-wide power, and "one person,
+    one household" means the admin oversees the system rather than being
+    a member of a household.
+  - Bootstrap from the server's command line, not the web: a small script
+    such as `node server/scripts/admin.js create <username>` /
+    `grant <username>` / `revoke <username>`, run via
+    `docker compose exec`. Shell access to the server is the proof of
+    ownership; there's no admin password in env files and no web route
+    that grants admin.
+  - The user also wanted to test the grant process, so `grant` should
+    work on an existing login. Test it on a throwaway account.
+- **Existing data.**
+  - The migration moves every existing item, event, location, tag and
+    user into household #1, with a placeholder name ("Household 1").
+  - The user names it through the admin's household loop
+    (create/rename households), so build rename into that page.
+- **Versioning is required, and comes first** (step 1 above). The user
+  explicitly asked that, since this is both a server and a database
+  update, versioning must work before the household migration runs on
+  their real data.
+  - **Migration runner:** a `schema_migrations` table (`version`,
+    `name`, `applied_at`) and numbered migrations that run once each, in
+    order, each inside a transaction (SQLite DDL is transactional, so a
+    failure rolls back completely).
+  - **Baseline migration (001):** today's schema, written idempotently so
+    an existing database just gets marked as being at 001 with no
+    changes.
+  - **Household migration (002):** the household change.
+  - **Downgrade protection:** refuse to start if the database's version is
+    newer than the code's highest migration.
+  - **Backups:** `restart.sh` writes the real applied version into each
+    backup's `SCHEMA_VERSION` instead of `"unversioned"`.
+  - **Dry run:** a check the user can run on the server against a copy of
+    a backup (e.g. `node server/scripts/migrate-check.js <copy.db>`). It
+    applies pending migrations to the copy and prints before/after counts
+    (items, events, locations, tags, users, and per household), so the
+    user can confirm their data lands in household #1 before the real
+    restart. The cloud session can't see the user's real database, so
+    this is how the migration gets verified against real data.
 
 ## Working conventions (unchanged from handoff 01, plus a few)
 
