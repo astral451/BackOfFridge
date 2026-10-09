@@ -392,8 +392,9 @@ priority — a Low item isn't necessarily more worth doing than a High one.
   width; what matters at a glance is whether something's expired or close
   to it, and how much is left, both already conveyed by the row's
   background tint and the stepper.
-- **Real schema-version tracking** — schema changes today are ad-hoc,
-  guarded `ALTER TABLE`/`CREATE TABLE IF NOT EXISTS` blocks checked at
+- **Real schema-version tracking** — now the recommended first step of
+  the multi-household work (see that entry below). Schema changes today
+  are ad-hoc, guarded `ALTER TABLE`/`CREATE TABLE IF NOT EXISTS` blocks checked at
   startup in `server/src/db.js` (safe and idempotent, but no migrations
   table, no ordered/named history, no way to tell which of the accumulated
   migrations a given database file has already had applied). Planned
@@ -402,20 +403,27 @@ priority — a Low item isn't necessarily more worth doing than a High one.
   the ones not yet recorded run at startup. `restart.sh` already writes a
   placeholder `SCHEMA_VERSION` file into every backup, ready to be swapped
   for the real applied version once this exists.
-- **Full multi-family isolation** (separate households sharing one
-  deployment, each with private data) — shelved, larger, only worth doing
-  if this is ever actually hosted for more than one household. The
-  per-user login item above deliberately does *not* include this: it's
-  one shared inventory with per-person accounts, not per-family
-  isolation. If this is ever picked up, the design work below (data
-  isolation approach + the security decision behind it) still stands and
-  doesn't need to be redone.
+- **Multi-household support — NEXT UP (High).** Separate households
+  sharing one deployment, each with private data. It was previously
+  shelved, but as of 2026-10-09 the user wants it built next. The per-user
+  login above deliberately did *not* include this: it's one shared
+  inventory with per-person accounts. The design below (data isolation
+  approach and the security decision behind it) stands. The concrete
+  plan is in `agent_handoff_02.md`: every table and query that needs
+  scoping, a suggested order (real schema-version tracking first), and
+  the decisions to confirm with the user before coding.
+  One urgent piece of it: signup is currently open, so anyone who can
+  reach the URL (e.g. through the Cloudflare Tunnel) can create an
+  account and see the shared inventory.
 
-## Reference: multi-family data isolation design (if picked up later)
+## Reference: multi-family data isolation design
 
-Recorded when this was still expected to ship alongside login — kept here
-since the reasoning stands whenever full multi-family isolation is
-actually built, even though it's currently shelved:
+Recorded when this was still expected to ship alongside login. The
+reasoning stands for the multi-household work now planned (see
+`agent_handoff_02.md`). One correction since it was written: `locations`
+(and the later `tags`) table already exists, with the name as its primary
+key, so scoping it means a table recreate with a composite
+`(household_id, name)` key, not just a new column:
 
 - **Shared DB, tenant column (recommended default):** add a `family_id` to
   `items` (and to a new `locations` table) and scope every query by it.
