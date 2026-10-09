@@ -31,6 +31,11 @@
   </header>
 
   <main id="app">
+    <div class="view-toggle" id="viewToggle" role="group" aria-label="List view">
+      <button type="button" data-view="grouped" class="active">By location</button>
+      <button type="button" data-view="flat">All items</button>
+    </div>
+
     <div class="chip-row" id="statusChips">
       <button class="chip" data-filter="all" type="button">All</button>
       <button class="chip active" data-filter="active" type="button">Active</button>
@@ -39,11 +44,11 @@
     </div>
 
     <div class="filter-bar-row">
-      <button class="disclosure-toggle" type="button" data-toggle="filterPanel">Search, filter, sort ▾</button>
+      <input type="search" id="searchBox" class="search-input" placeholder="Search..." aria-label="Search">
+      <button class="disclosure-toggle" type="button" data-toggle="filterPanel">Filters ▾</button>
       <button class="reset-filters-btn" type="button" id="resetFiltersBtn" hidden>Reset</button>
     </div>
     <div class="filter-panel" hidden id="filterPanel">
-      <label>Search <input type="text" id="searchBox" placeholder="Search..."></label>
       <label>Location <select id="filterLocation"><option value="">All</option></select></label>
       <label>Tag <select id="filterTag"><option value="">All</option></select></label>
       <label>Sort

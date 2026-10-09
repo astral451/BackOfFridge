@@ -171,8 +171,9 @@
   reuse data already computed per item, no new query needed. A
   "Search, filter, sort ▾" disclosure holds the existing location/tag/
   search/sort controls (search first, since it's the most-used one), with a
-  one-tap Reset button next to the toggle whenever any of them is active.
-  The quick-add "+" button also processes whatever's still sitting in the
+  one-tap Reset button next to the toggle whenever any of them is active
+  (search has since moved out of the disclosure to stay always visible;
+  see below). The quick-add "+" button also processes whatever's still sitting in the
   quick-add box (dictation often leaves text there without a keyboard
   Return press) instead of silently discarding it in favor of a blank form.
 - Light theme, auto-switching ("Pantry Fresh") — a warm cream, sage-green
@@ -205,10 +206,80 @@
 - Usage-history query tool (`common_sql_commands.sh`) — canned `sqlite3`
   queries over the `item_events` table for "what's actually being used"
   questions without hand-writing SQL each time: most-purchased items,
-  activity by user and event type, a recent-activity feed, and
-  consumed-vs-thrown-out counts. Run with no arguments to list the
+  activity by user and event type, a recent-activity feed,
+  consumed-vs-thrown-out counts, and `catch-up`: bursts of quick
+  reductions on one item (see "Usage analysis" in the Roadmap), with each
+  burst's tap count, total reduced, and days since the item's previous
+  event. Its thresholds are tunable with `BURST_MINUTES` (default 10) and
+  `BURST_MIN_TAPS` (default 3). `items` lists every item's current state: amount,
+  status, and whether it's active, sorted A-Z by name. `by-name` adds up every
+  entry with the same name (case-insensitive, outer spaces ignored) into
+  one row per product: entries, active entries, on hand, times purchased,
+  consumed (including downward quick-sets, excluding anything undone),
+  thrown out, and last used. Each purchase stays its own item with its own
+  expiration in the app; this grouping only exists for consumption
+  questions, where every "Grape Waterloo" is the same thing. Run with no arguments to list the
   available commands (works even without `sqlite3` installed or a database
   present yet, checked before either of those).
+- Dictation-resilient quick-add parsing — `parseQuickAdd` (`public/app.js`)
+  no longer treats commas as the thing that decides which field is which,
+  since iPhone dictation places them unreliably (and saying "comma" out loud
+  to fix that was slow). Each field is now found by a keyword or by being
+  unambiguous on its own: a full date anywhere in the line is the
+  expiration date, no "expires" needed (purchase date already defaults to
+  today); "size"/"volume"/"weight" separate a count from a per-item size
+  ("quantity two size 24 ounces"), and so does a comma between the two
+  numbers ("two, 24 ounces"), whether typed or said as "comma"; location
+  and tag are matched anywhere in the line, not just at the end; a
+  relative expiration works without "expires" too ("in two weeks", "a
+  month from today"). Built
+  against real dictated lines collected in `dictation_examples.md`, which
+  also documents the keyword rules. One case stays unfixable by design:
+  once dictation has merged "two twenty-four ounces" into "224 ounces",
+  the text can't say which was meant. A separator word or comma is what
+  prevents that.
+- "By location / All items" view toggle — the main list can now show every
+  item in one flat list (the server's expiration-first order, location
+  shown in each row's detail line) instead of one collapsible section per
+  location, for scanning everything at once for what's expiring or low.
+  Status chips, search, filters and row actions work the same in both
+  views. The choice is remembered per browser in `localStorage`.
+- Search box always visible — moved out of the collapsible panel onto the
+  toggle row, so searching never needs an extra tap. The panel (now just
+  "Filters ▾") holds only location/tag/sort.
+- Quick set: tap a row's amount to type what's actually left. Tapping
+  the quantity (or a fill-level item's bar) on an active row swaps it for
+  a number box pre-filled with the current value. Done/Enter or tapping
+  away saves, Escape cancels, and 0 marks the item consumed. This is one
+  action for what used to take five or ten − taps when catching the app
+  up (see "Usage analysis" in the Roadmap). It also covers setting a new
+  fill-level item's real starting level. Saved through the existing PATCH
+  with a `recount: true` flag, which records a single `recount` event
+  (`{field, from, to, unit}`) instead of `edited`/`fill_level_set`, so
+  analysis can tell an explicit correction from consumption at that
+  moment. `common_sql_commands.sh catch-up` lists downward recounts
+  alongside tap bursts (`via` column). Main inventory page only, for now;
+  At a Glance still has just −/+.
+- Leading/trailing spaces are stripped from item text fields (name,
+  location, tag, unit, notes), so an accidental space before or after a
+  name no longer makes " Orange Cream Bubly" a different item from
+  "Orange Cream Bubly" in search, sorting and purchase counts. This is
+  done twice: in the browser (quick-add parse results, the purchase/edit
+  form on save, and Buy again/Edit pre-fills), and again on the server
+  for every create and edit (`trimTextFields` in
+  `server/src/routes/items.js`, plus `ensureLocation`/`ensureTag`), so the
+  API is covered even when called directly. A name that's only spaces is
+  rejected in both places. This applies to new entries and edits only:
+  existing rows aren't rewritten, though opening one in Edit and saving
+  cleans it up.
+- Fix: the "⋯" row menu opens upward when there isn't room below it. On
+  the last rows of the list it used to open under the fixed quick-add bar,
+  leaving its actions untappable.
+- Fix: the "⋯" menu on consumed/thrown-out rows (visible under the "All"
+  chip) was half-transparent and drawn behind the rows below it. Those
+  rows were faded with `opacity` on the whole row, which also faded the
+  menu inside it and trapped its z-index within the row. Now only the
+  row's contents are faded, not the menu.
 
 ## Roadmap
 
@@ -236,8 +307,16 @@ priority — a Low item isn't necessarily more worth doing than a High one.
   image matching, likely an external vision API call per photo, and
   barcode scanning above already covers the same "auto-identify a
   product" goal far more cheaply and reliably if that's ever wanted.)
+- **Bulk entry from a list (Medium)** — paste a block of lines (e.g. an
+  iPhone Notes list, one item per line) and log them all at once. Each line
+  goes through the same `parseQuickAdd` as the quick-add box, and the
+  results show as editable review cards with a ✕ to drop one. Nothing is
+  saved until "Add all", which addresses the concern that one bad line in
+  a batch is hard to go back and fix. Builds directly on the
+  dictation-resilient parser (Shipped), so it's only as good as that is.
 - **Dictation for adding items — better parsing.** The freeform quick-add
-  box + naive regex parser shipped above; two fancier alternatives were
+  box shipped above, and its parser was since made resilient to dictation's
+  comma placement (see Shipped). Two fancier alternatives were
   considered and not chosen for that pass, still available as a fast-
   follow if the naive parser proves too fragile in practice: parsing via
   an LLM call instead of regex (Medium — more robust, but a new external
@@ -276,6 +355,31 @@ priority — a Low item isn't necessarily more worth doing than a High one.
     Quick Tunnel. Graded High as a whole not because any one piece is
     novel, but because it touches auth again, needs a stable public
     endpoint, and needs an external integration layer all together.
+- **Usage analysis: treat quick "catch-up" bursts as backlog, not
+  real-time consumption (note for any future trends/analytics work).**
+  Real usage pattern: an item logged as 20 units (or 100%) often isn't
+  updated as it's used. Later the user notices it's out of date and taps
+  − five or ten times in a row to catch it up. Each tap is recorded as its
+  own `item_events` row: a `consumed` event with `quantity: 1` for
+  count-tracked items, or a `fill_level_set` event for fill-level items.
+  Read naively, the history says all of that was consumed in the minute
+  the taps happened, when it was actually used gradually over the days or
+  weeks since the previous event.
+
+  Rule of thumb for analysis: several reductions on the same item within
+  a few minutes of each other (say ≤10 minutes between consecutive
+  events) are most likely one catch-up session. Collapse the burst into a
+  single reduction whose total is known but whose timing is only bounded:
+  sometime between the item's previous event and the burst. Don't count
+  it as one moment of consumption. For rates like "how fast does X get
+  used" or "what day does it get consumed", spread the burst's total over
+  that gap, or exclude bursts from timing questions entirely and keep them
+  only for totals.
+  `common_sql_commands.sh catch-up` lists these bursts today, for seeing
+  how often it happens in real data. This only needs to inform how
+  queries are written (e.g. a future trends UI). Nothing about how events
+  are recorded needs to change, since the timestamps already carry the
+  signal.
 - **Favorites filter** — surface the most-purchased items for quick re-up.
   Now unblocked: `item_events` (shipped above) has a `purchased` event per
   purchase, so this is a `GROUP BY item_name` count over that table filtered

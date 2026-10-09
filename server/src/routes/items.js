@@ -75,6 +75,20 @@ router.get('/:id/history', (req, res) => {
 });
 
 // POST /api/items - log a purchase
+// Free-text fields get leading/trailing whitespace stripped before they're
+// stored - an accidental space before or after a name (easy to do on a
+// phone keyboard, or left by dictation) otherwise makes " Orange Cream
+// Bubly" a different item from "Orange Cream Bubly" in searches, sorting
+// and purchase counts. Done here as well as in the browser so anything
+// calling the API directly is covered too.
+const TEXT_FIELDS = ['name', 'location', 'tag', 'unit', 'notes'];
+function trimTextFields(obj) {
+  for (const f of TEXT_FIELDS) {
+    if (typeof obj[f] === 'string') obj[f] = obj[f].trim();
+  }
+  return obj;
+}
+
 router.post('/', (req, res) => {
   const {
     name,
@@ -89,7 +103,7 @@ router.post('/', (req, res) => {
     tracking_mode = 'count',
     fill_percent = null,
     low_stock_threshold = null,
-  } = req.body;
+  } = trimTextFields({ ...req.body });
 
   if (!name || typeof name !== 'string') {
     return res.status(400).json({ error: 'name is required' });
@@ -129,6 +143,10 @@ router.patch('/:id', (req, res) => {
   for (const f of fields) {
     if (req.body[f] !== undefined) updates[f] = req.body[f];
   }
+  trimTextFields(updates);
+  if (updates.name !== undefined && !updates.name) {
+    return res.status(400).json({ error: 'name is required' });
+  }
   if (updates.status && !VALID_STATUS.includes(updates.status)) {
     return res.status(400).json({ error: `status must be one of ${VALID_STATUS.join(', ')}` });
   }
@@ -140,6 +158,9 @@ router.patch('/:id', (req, res) => {
   }
   if (updates.fill_percent != null && !(updates.fill_percent >= 0 && updates.fill_percent <= 100)) {
     return res.status(400).json({ error: 'fill_percent must be between 0 and 100' });
+  }
+  if (updates.quantity !== undefined && !(typeof updates.quantity === 'number' && updates.quantity >= 0)) {
+    return res.status(400).json({ error: 'quantity must be a number, 0 or more' });
   }
 
   const merged = { ...existing, ...updates };
@@ -155,10 +176,24 @@ router.patch('/:id', (req, res) => {
 
   const changedFields = Object.keys(updates);
   const onlyFillPercentChanged = changedFields.length === 1 && updates.fill_percent !== undefined;
+  // `recount: true` marks a direct "this is how much is actually left" set
+  // from the row's quick edit, as opposed to an ordinary edit or a +/- tap.
+  // It's recorded as its own event type so usage analysis can tell an
+  // explicit correction (catching the app up on consumption that happened
+  // gradually) apart from consumption at that moment.
+  const recountField = req.body.recount === true && changedFields.length === 1
+    && ['quantity', 'fill_percent'].includes(changedFields[0]) ? changedFields[0] : null;
   const dateFields = ['purchase_date', 'expiration_date'];
   const onlyDatesChanged = changedFields.length > 0 && changedFields.every((f) => dateFields.includes(f));
 
-  if (onlyFillPercentChanged) {
+  if (recountField) {
+    db.recordEvent(existing.id, existing.name, 'recount', {
+      field: recountField,
+      from: existing[recountField],
+      to: updates[recountField],
+      unit: recountField === 'fill_percent' ? '%' : existing.unit,
+    }, req.username);
+  } else if (onlyFillPercentChanged) {
     db.recordEvent(existing.id, existing.name, 'fill_level_set', { from: existing.fill_percent, to: updates.fill_percent }, req.username);
   } else if (onlyDatesChanged) {
     // A date correction (e.g. fixing a wrong expiration) isn't a
