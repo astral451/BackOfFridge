@@ -71,7 +71,10 @@ test('a new database gets the full schema and is recorded at the latest version'
 test('running again applies nothing and changes nothing', (t) => {
   const { db } = tempDb(t);
   migrate(db);
-  db.exec("INSERT INTO items (name, location) VALUES ('Milk', 'Fridge')");
+  db.exec(`
+    INSERT INTO households (id, name, invite_code) VALUES (1, 'Home', 'ABCDEFGH');
+    INSERT INTO items (name, location, household_id) VALUES ('Milk', 'Fridge', 1);
+  `);
   const before = schema(db);
   const rows = db.prepare('SELECT * FROM items').all();
   const result = migrate(db);
@@ -116,7 +119,10 @@ test('a database newer than the code is refused and left untouched', (t) => {
 test('a migration that fails partway rolls back completely', (t) => {
   const { db } = tempDb(t);
   migrate(db);
-  db.exec("INSERT INTO items (name) VALUES ('Milk')");
+  db.exec(`
+    INSERT INTO households (id, name, invite_code) VALUES (1, 'Home', 'ABCDEFGH');
+    INSERT INTO items (name, household_id) VALUES ('Milk', 1);
+  `);
   const before = schema(db);
 
   const broken = {

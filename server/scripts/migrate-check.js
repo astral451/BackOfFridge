@@ -31,6 +31,9 @@ if (!source) {
 }
 if (!fs.existsSync(source) || !fs.statSync(source).isFile()) {
   console.error(`Not a file: ${source}`);
+  if (fs.existsSync('/.dockerenv')) {
+    console.error('(Running inside Docker: use the path as mounted in the container, e.g. /backups/<timestamp>/inventory.db.)');
+  }
   process.exit(1);
 }
 
@@ -106,7 +109,7 @@ function householdBreakdown() {
     if (!columns(t).includes('household_id')) continue;
     for (const r of db.prepare(`SELECT household_id AS h, COUNT(*) AS n FROM "${t}" GROUP BY household_id ORDER BY household_id`).all()) {
       const label = r.h === null ? '(no household)' : `#${r.h}${names[r.h] !== undefined ? ` "${names[r.h]}"` : ''}`;
-      lines.push(`  ${t.padEnd(18)} ${label.padEnd(28)} ${r.n}`);
+      lines.push(`  ${t.padEnd(20)} ${label.padEnd(28)} ${String(r.n).padStart(7)}`);
     }
   }
   return lines;
@@ -118,7 +121,7 @@ function describeVersion(v) {
 
 function printCounts(snap) {
   for (const [t, info] of Object.entries(snap.tables)) {
-    console.log(`  ${t.padEnd(18)} ${String(info.count).padStart(7)}`);
+    console.log(`  ${t.padEnd(20)} ${String(info.count).padStart(7)}`);
   }
 }
 
@@ -163,7 +166,7 @@ if (result) {
     const prev = before.tables[t];
     const delta = prev ? info.count - prev.count : null;
     const note = !prev ? '  (new table)' : delta ? `  (${delta > 0 ? '+' : ''}${delta})` : '';
-    console.log(`  ${t.padEnd(18)} ${String(info.count).padStart(7)}${note}`);
+    console.log(`  ${t.padEnd(20)} ${String(info.count).padStart(7)}${note}`);
   }
   const hhAfter = householdBreakdown();
   if (hhAfter.length) {
@@ -179,12 +182,12 @@ if (result) {
   for (const [t, prev] of Object.entries(before.tables)) {
     const now = after.tables[t];
     if (!now) {
-      console.log(`  ${t.padEnd(18)} TABLE REMOVED`);
+      console.log(`  ${t.padEnd(20)} TABLE REMOVED`);
       continue;
     }
     const removedCols = prev.columns.filter((c) => !now.columns.includes(c));
     if (removedCols.length) {
-      console.log(`  ${t.padEnd(18)} COLUMNS REMOVED: ${removedCols.join(', ')}`);
+      console.log(`  ${t.padEnd(20)} COLUMNS REMOVED: ${removedCols.join(', ')}`);
       continue;
     }
     const added = now.columns.filter((c) => !prev.columns.includes(c));
@@ -193,9 +196,26 @@ if (result) {
     let status = missing ? `${missing} EXISTING ROW(S) CHANGED OR REMOVED` : 'existing rows unchanged';
     if (!missing && extra) status += `, ${extra} row(s) added`;
     if (added.length) status += `; new columns: ${added.join(', ')}`;
-    console.log(`  ${t.padEnd(18)} ${status}`);
+    console.log(`  ${t.padEnd(20)} ${status}`);
   }
   console.log('');
+
+  // Once households exist, every data row must belong to one, and so must
+  // every active account other than the admin.
+  if (after.tables.households) {
+    console.log('Household checks:');
+    for (const t of ['items', 'item_events', 'locations', 'tags']) {
+      const n = db.prepare(`SELECT COUNT(*) AS n FROM "${t}" WHERE household_id IS NULL`).get().n;
+      console.log(`  ${t.padEnd(20)} ${n ? `${n} ROW(S) WITH NO HOUSEHOLD` : 'all rows have a household'}`);
+      if (n) ok = false;
+    }
+    const orphans = db.prepare(
+      "SELECT COUNT(*) AS n FROM users WHERE status = 'active' AND is_admin = 0 AND household_id IS NULL"
+    ).get().n;
+    console.log(`  ${'users'.padEnd(20)} ${orphans ? `${orphans} ACTIVE USER(S) WITH NO HOUSEHOLD` : 'every active user has a household'}`);
+    if (orphans) ok = false;
+    console.log('');
+  }
 
   const integrity = db.prepare('PRAGMA integrity_check').all().map((r) => r.integrity_check);
   const fk = db.prepare('PRAGMA foreign_key_check').all();

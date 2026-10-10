@@ -424,8 +424,19 @@ priority — a Low item isn't necessarily more worth doing than a High one.
   approach and the security decision behind it) stands. The concrete
   plan is in `agent_handoff_02.md`: every table and query that needs
   scoping, a suggested order, and the user's confirmed decisions.
-  Step 1, real schema-version tracking, has shipped (see Shipped); the
-  household change will be migration 002.
+  Step 1, real schema-version tracking, has shipped (see Shipped).
+  Step 2 is written: migration 002 (`server/src/migrations/002_households.js`)
+  adds a `households` table (each with an invite code), a
+  `new_household_codes` table for admin-issued codes, `household_id` on
+  `users`/`items`/`item_events`, rebuilds `locations`/`tags` keyed by
+  `(household_id, name)`, adds `users.status` (default `'pending'`),
+  `is_admin` and `household_role`, and moves every existing row and user
+  into household #1, "Household 1". Triggers stop an item or event being
+  written without a household or moved to another one (cheaper and safer
+  than rebuilding those two big tables just to get `NOT NULL`). The server
+  does **not** apply it yet (`SERVER_MAX_VERSION = 1` in `db.js`), since the
+  routes don't supply a household until step 3; `migrate-check.js` does,
+  so it can be dry-run against real data now.
   One urgent piece of it: signup is currently open, so anyone who can
   reach the URL (e.g. through the Cloudflare Tunnel) can create an
   account and see the shared inventory.
