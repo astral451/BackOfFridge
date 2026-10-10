@@ -200,9 +200,9 @@
   and rebuilds the Docker image only if the pull actually moved `HEAD`
   (otherwise just restarts, keeping a no-op run fast). Refuses to pull over
   an uncommitted local change rather than risking a mid-script merge
-  conflict. Each backup is tagged with a placeholder `SCHEMA_VERSION` file
-  (currently just `"unversioned"`), ready for the real schema-version
-  tracking system below once that exists.
+  conflict. Each backup is tagged with a `SCHEMA_VERSION` file: the
+  database's real schema version since schema-version tracking shipped
+  (below), `"unversioned"` before that.
 - Usage-history query tool (`common_sql_commands.sh`) — canned `sqlite3`
   queries over the `item_events` table for "what's actually being used"
   questions without hand-writing SQL each time: most-purchased items,
@@ -280,6 +280,30 @@
   rows were faded with `opacity` on the whole row, which also faded the
   menu inside it and trapped its z-index within the row. Now only the
   row's contents are faded, not the menu.
+
+- Real schema-version tracking — the first step of the multi-household
+  work. Schema changes are now numbered migrations in
+  `server/src/migrations/` (listed in order in its `index.js`), run by
+  `server/src/migrate.js` at startup. Each runs once, inside its own
+  transaction, and is recorded in a `schema_migrations` table (`version`,
+  `name`, `applied_at`); a migration that throws partway rolls back
+  completely. Migration 001 ("baseline") is the old ad-hoc
+  `PRAGMA table_info`/`ALTER` startup blocks from `db.js`, moved unchanged,
+  so an existing database is just recorded as version 1 (verified: a
+  database made by the previous code ends up byte-for-byte the same in
+  schema and rows as restarting the previous code on it). The server
+  refuses to start, with a clear log line, if the database is newer than
+  the code's highest migration. `restart.sh` writes the real version into
+  each backup's `SCHEMA_VERSION` (read through a throwaway container, so no
+  host `sqlite3` is needed). `server/scripts/migrate-check.js <db>` is a dry
+  run against a copy of a real database: version and row counts before and
+  after (per household too, once that column exists), whether every
+  existing row came through unchanged, and an integrity check; it never
+  writes to the file it's given. `npm test` in `server/` runs the
+  migration tests (`node:test`, no new dependency): fresh database, old
+  unversioned database, re-run is a no-op, downgrade refused, partial
+  failure rolls back, and the check script leaves its input untouched.
+  See README "Schema versions and migrations" for the dry-run steps.
 
 ## Roadmap
 
@@ -392,17 +416,6 @@ priority — a Low item isn't necessarily more worth doing than a High one.
   width; what matters at a glance is whether something's expired or close
   to it, and how much is left, both already conveyed by the row's
   background tint and the stepper.
-- **Real schema-version tracking** — now the recommended first step of
-  the multi-household work (see that entry below). Schema changes today
-  are ad-hoc, guarded `ALTER TABLE`/`CREATE TABLE IF NOT EXISTS` blocks checked at
-  startup in `server/src/db.js` (safe and idempotent, but no migrations
-  table, no ordered/named history, no way to tell which of the accumulated
-  migrations a given database file has already had applied). Planned
-  approach: a `schema_migrations` table (`version`, `applied_at`), the
-  existing ad-hoc blocks pulled out into numbered migration files, only
-  the ones not yet recorded run at startup. `restart.sh` already writes a
-  placeholder `SCHEMA_VERSION` file into every backup, ready to be swapped
-  for the real applied version once this exists.
 - **Multi-household support — NEXT UP (High).** Separate households
   sharing one deployment, each with private data. It was previously
   shelved, but as of 2026-10-09 the user wants it built next. The per-user
@@ -410,8 +423,9 @@ priority — a Low item isn't necessarily more worth doing than a High one.
   inventory with per-person accounts. The design below (data isolation
   approach and the security decision behind it) stands. The concrete
   plan is in `agent_handoff_02.md`: every table and query that needs
-  scoping, a suggested order (real schema-version tracking first), and
-  the decisions to confirm with the user before coding.
+  scoping, a suggested order, and the user's confirmed decisions.
+  Step 1, real schema-version tracking, has shipped (see Shipped); the
+  household change will be migration 002.
   One urgent piece of it: signup is currently open, so anyone who can
   reach the URL (e.g. through the Cloudflare Tunnel) can create an
   account and see the shared inventory.

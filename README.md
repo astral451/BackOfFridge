@@ -133,13 +133,13 @@ it at that platform's persistent volume for `DB_PATH` instead of a local bind mo
 ### Backing up before pulling an update
 
 Worth doing before any `git pull` + `docker compose up --build`, since new
-code sometimes adds tables/columns to the database on startup. None of the
-migrations so far delete or rewrite existing data (only `CREATE TABLE IF NOT
-EXISTS` / `ALTER TABLE ADD COLUMN`), but backing up first costs nothing and
-means a bad upgrade is always recoverable. `./restart.sh` does this
-automatically (stop, copy `data/` into `data-backups/<timestamp>`, keep the
-last 10, start again — pass `--build` to also rebuild the image after a
-`git pull`):
+code can change the database schema on startup (see "Schema versions and
+migrations" below). Backing up first costs nothing and means a bad upgrade
+is always recoverable. `./restart.sh` does this automatically (stop, copy
+`data/` into `data-backups/<timestamp>`, keep the last 20, start again —
+pass `--build` to also rebuild the image after a `git pull`). Each backup
+gets a `SCHEMA_VERSION` file holding the database's schema version at the
+time (`unversioned` for a database from before versioning existed):
 
 ```bash
 ./restart.sh          # backup + restart, no rebuild
@@ -160,6 +160,54 @@ so a copy taken while the app is running could miss very recent writes that
 are still sitting in `inventory.db-wal` rather than the main file — copying
 the whole (stopped) `data` folder avoids that. To restore, stop the
 container, swap `data` for the backed-up folder, and start it again.
+
+### Schema versions and migrations
+
+Schema changes are numbered migrations in `server/src/migrations/`. The
+database records the ones it has had in a `schema_migrations` table
+(`version`, `name`, `applied_at`). At startup the server applies any it
+hasn't had yet, in order, each in its own transaction: a migration that fails
+partway rolls back completely, leaving the database at the previous version.
+The startup log says which version the database is at:
+
+```bash
+docker compose logs backoffridge | grep -i "schema"
+```
+
+Migration 001 is the schema as it was before versioning existed, so an
+existing database just gets recorded as version 1 with nothing changed.
+
+If the database is at a *newer* version than the code knows (e.g. after
+rolling the code back), the server refuses to start and says so in the logs,
+rather than run old code against a schema it doesn't understand. Deploy the
+newer code again, or restore a backup whose `SCHEMA_VERSION` the code knows.
+
+**Dry run before a schema upgrade.** `server/scripts/migrate-check.js`
+applies the pending migrations to a *copy* of a database and reports what
+changed: version before and after, row counts per table (and per household,
+once households exist), whether every existing row came through unchanged,
+and an integrity check. The file you point it at is never written to. To
+check new code against your real data before restarting onto it:
+
+```bash
+cd ~/apps/BackOfFridge
+git pull                      # the new code; the running container is unaffected
+docker compose build          # build the new image without restarting
+ls data-backups/              # pick the newest backup restart.sh made
+docker compose run --rm --no-deps \
+  -v "$PWD/data-backups:/backups:ro" \
+  backoffridge node scripts/migrate-check.js /backups/<timestamp>/inventory.db
+```
+
+It ends with `RESULT: OK` (exit code 0) or `RESULT: PROBLEMS FOUND`. Add
+`--keep` to keep the migrated copy for a closer look (it's inside the
+throwaway container, so only useful when running outside Docker). If it
+looks right, restart onto the new code with `./restart.sh --build` (`--build`
+is needed because the pull already happened, so `restart.sh` would otherwise
+see no new commits and skip the rebuild).
+
+Without Docker, from `server/`: `node scripts/migrate-check.js <path/to/inventory.db>`.
+`npm test` (in `server/`) runs the migration tests.
 
 ### Reaching it from your phone / Supernote away from home
 
