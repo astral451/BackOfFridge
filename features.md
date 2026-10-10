@@ -416,6 +416,12 @@ priority — a Low item isn't necessarily more worth doing than a High one.
   width; what matters at a glance is whether something's expired or close
   to it, and how much is left, both already conveyed by the row's
   background tint and the stepper.
+- **Staging copy for testing branches (Low/Medium)** — a second copy of
+  the app on the same server (git worktree, separate Compose project,
+  port 3001) running the branch under test against a copy of the newest
+  production backup, so the real app stays up and real data stays
+  untouched while a feature is tested on the phone. Scoped in
+  `staging_plan.md`; not built yet.
 - **Multi-household support — NEXT UP (High).** Separate households
   sharing one deployment, each with private data. It was previously
   shelved, but as of 2026-10-09 the user wants it built next. The per-user
