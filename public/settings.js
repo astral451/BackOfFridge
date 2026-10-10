@@ -3,6 +3,21 @@
     window.location.href = 'login.html?next=' + encodeURIComponent(window.location.pathname.split('/').pop());
   }
 
+  // Pages here show household data. A pending account goes to the waiting
+  // page instead, and the admin account (no household) to the admin page.
+  // Takes either /api/auth/me's user or a 403 body's { reason }.
+  function redirectIfNoHousehold(info) {
+    if (info.status === 'pending' || info.reason === 'pending') {
+      window.location.href = 'pending.html';
+      return true;
+    }
+    if ((info.isAdmin && !info.household) || info.reason === 'admin') {
+      window.location.href = 'admin.html';
+      return true;
+    }
+    return false;
+  }
+
   function apiFetch(path, opts) {
     opts = opts || {};
     opts.headers = Object.assign({}, opts.headers, { 'Content-Type': 'application/json' });
@@ -13,6 +28,8 @@
       }
       if (!res.ok) {
         return res.json().then(function (body) {
+          // Leaving the page: settle nothing, so no error alert flashes first.
+          if (res.status === 403 && redirectIfNoHousehold(body)) return new Promise(function () {});
           throw new Error(body.error || 'request failed');
         });
       }
@@ -29,12 +46,34 @@
       }
       return res.json();
     }).then(function (me) {
-      if (me) document.getElementById('whoami').textContent = 'Signed in as ' + me.username;
+      if (!me || redirectIfNoHousehold(me)) return;
+      document.getElementById('whoami').textContent = 'Signed in as ' + me.username;
+      showHousehold(me);
     });
   }
 
   document.getElementById('logoutBtn').addEventListener('click', function () {
     fetch('/api/auth/logout', { method: 'POST' }).then(redirectToLogin);
+  });
+
+  function renderHousehold(h) {
+    document.getElementById('householdName').textContent = h.name;
+    document.getElementById('inviteCode').textContent = h.inviteCode;
+    document.getElementById('householdMembers').textContent = 'Members: ' + h.members.join(', ');
+    document.getElementById('householdSection').classList.remove('hidden');
+  }
+
+  function showHousehold(me) {
+    if (me.isAdmin) document.getElementById('adminSection').classList.remove('hidden');
+    if (!me.household) return;
+    apiFetch('/household').then(renderHousehold).catch(function (err) { alert(err.message); });
+  }
+
+  document.getElementById('regenerateCodeBtn').addEventListener('click', function () {
+    if (!confirm('Make a new invite code? The current one will stop working.')) return;
+    apiFetch('/household/invite-code', { method: 'POST' })
+      .then(renderHousehold)
+      .catch(function (err) { alert(err.message); });
   });
 
   // Per-browser preference (localStorage, not synced across devices) - the

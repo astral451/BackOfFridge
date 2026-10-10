@@ -24,6 +24,21 @@
   </header>
 
   <main id="app">
+    <section class="settings-section hidden" id="householdSection">
+      <h2 id="householdName">Household</h2>
+      <p class="settings-desc">To let someone join this household, give them this invite code. They enter it when they sign up.</p>
+      <div class="invite-code" id="inviteCode"></div>
+      <button class="small" type="button" id="regenerateCodeBtn">New code</button>
+      <p class="settings-desc" id="regenerateHint">A new code stops the old one working. Everyone already in the household stays.</p>
+      <p class="settings-desc" id="householdMembers"></p>
+    </section>
+
+    <section class="settings-section hidden" id="adminSection">
+      <h2>Admin</h2>
+      <p class="settings-desc">This login is also an admin.</p>
+      <a href="admin.html">Open the admin page &rarr;</a>
+    </section>
+
     <section class="settings-section">
       <h2>Appearance</h2>
       <p class="settings-desc">Auto matches your browser or device's own light/dark setting.</p>

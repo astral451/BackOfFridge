@@ -33,6 +33,10 @@
       <p>Create an account</p>
       <input type="text" id="signup-username" placeholder="choose a username" autocomplete="username">
       <input type="password" id="signup-password" placeholder="choose a password (6+ characters)" autocomplete="new-password">
+      <input type="text" id="signup-code" placeholder="invite code (if you have one)" autocomplete="off" autocapitalize="characters" spellcheck="false">
+      <p id="codeInfo" class="code-info hidden"></p>
+      <input type="text" id="signup-household" class="hidden" placeholder="name your household" autocomplete="off">
+      <p class="code-info" id="noCodeHint">No code? You can still sign up; your account waits until it's approved.</p>
       <button id="signupBtn">Sign up</button>
       <p><a href="#" id="showLogin">Already have an account? Log in</a></p>
     </div>

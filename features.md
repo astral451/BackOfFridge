@@ -77,7 +77,7 @@
   Verified with curl (signup/login/logout, wrong password rejected, a
   second user's action correctly attributed in another user's view of the
   same item's history) and a headless-browser run of the actual signup →
-  redirect → logged-in flow. Full multi-family isolation is shelved below
+  redirect → logged-in flow. Full multi-family isolation was shelved at the time (since built: see "Multi-household support" below)
   as a distinct, larger, "only if actually needed" item — it isn't required
   for this and wasn't built.
 - Location matching is now case-insensitive — `locations.name` has a
@@ -305,16 +305,57 @@
   failure rolls back, and the check script leaves its input untouched.
   See README "Schema versions and migrations" for the dry-run steps.
 
+- Multi-household support — several households share one deployment, each
+  seeing only its own items, history, locations and tags (design:
+  "Reference: multi-family data isolation design" below; plan and the
+  user's decisions: `agent_handoff_02.md`).
+  - **Schema:** migration 002 (households, new-household codes,
+    `household_id` on users/items/item_events, locations and tags keyed by
+    `(household_id, name)`, `users.status`/`is_admin`/`household_role`).
+    Existing data all moved into household #1, "Household 1", verified with
+    `migrate-check.js` against a real backup (267 items, 806 events, 12
+    locations, 7 tags, 2 users, every row unchanged) before the server was
+    allowed to apply it. Triggers stop an item or event being written
+    without a household or moved to another one.
+  - **Scoping:** the household comes only from the session
+    (`req.householdId`, set in `index.js`). All household data goes through
+    `server/src/store.js`, where every function takes the household id as
+    its first argument and throws without one. Another household's item
+    ids return the same 404 as missing ones. Mutating routes go through
+    one `can(user, action)` check (`server/src/permissions.js`), which today
+    allows every active member everything.
+  - **Signup:** a household's invite code joins it; an admin-issued
+    new-household code (single use) starts a new one that the person
+    names; no code makes a pending account that sees only a "waiting for
+    approval" page (`pending.html`) until the admin approves it into a
+    household or rejects it. The signup form says what a code does as it's
+    typed. Settings shows the household's members and invite code, with a
+    button for a new code.
+  - **Admin:** a separate, dedicated login with no household, created only
+    from the server's command line (`scripts/admin.js create|grant|revoke|
+    reset-password|list`; passwords are generated and printed once).
+    `admin.html` lists pending accounts (approve into an existing or new
+    household, or reject), issues and revokes new-household codes, and
+    creates and renames households. Household routes return 403 for it.
+  - **Logs** name the household on every `ACCESS` line, and signups,
+    approvals, rejections and code changes each get their own line.
+  - **Tests** (`npm test`): `test/isolation.test.js` runs the real API with
+    two households sharing location/tag names and checks every household
+    endpoint and every `:id` route (404, item unchanged), client-sent
+    household ids being ignored, pending/admin/anonymous access, single-use
+    codes, approval, rejection, and command-line grant/revoke. It was
+    checked by deliberately removing household filters from the queries
+    and confirming the tests fail. Plus a Playwright pass of signup (both
+    code kinds and a bad code), pending, admin approve/rename, settings and
+    the existing pages at 390px and 1000px.
+
 ## Roadmap
 
 Difficulty grades below (Low/Medium/High) are rough cost/complexity, not
 priority — a Low item isn't necessarily more worth doing than a High one.
 
-- **Location customization** — shipped for a single household (locations are
-  now a managed list with add/delete). If full multi-family isolation is
-  ever built (see the shelved item below), this list would need to be
-  scoped per family like everything else — not needed for the single
-  shared inventory this app has today.
+- **Location customization** — shipped: locations (and tags) are a managed
+  list with add/delete, each household with its own.
 - **Barcode/visual scanning** — scan a barcode or product photo to quickly
   re-up an item instead of retyping it (builds on "Buy again").
 - **Photo capture + recall (Low/Medium)** — **decided: manual only, no
@@ -422,30 +463,16 @@ priority — a Low item isn't necessarily more worth doing than a High one.
   production backup, so the real app stays up and real data stays
   untouched while a feature is tested on the phone. Scoped in
   `staging_plan.md`; not built yet.
-- **Multi-household support — NEXT UP (High).** Separate households
-  sharing one deployment, each with private data. It was previously
-  shelved, but as of 2026-10-09 the user wants it built next. The per-user
-  login above deliberately did *not* include this: it's one shared
-  inventory with per-person accounts. The design below (data isolation
-  approach and the security decision behind it) stands. The concrete
-  plan is in `agent_handoff_02.md`: every table and query that needs
-  scoping, a suggested order, and the user's confirmed decisions.
-  Step 1, real schema-version tracking, has shipped (see Shipped).
-  Step 2 is written: migration 002 (`server/src/migrations/002_households.js`)
-  adds a `households` table (each with an invite code), a
-  `new_household_codes` table for admin-issued codes, `household_id` on
-  `users`/`items`/`item_events`, rebuilds `locations`/`tags` keyed by
-  `(household_id, name)`, adds `users.status` (default `'pending'`),
-  `is_admin` and `household_role`, and moves every existing row and user
-  into household #1, "Household 1". Triggers stop an item or event being
-  written without a household or moved to another one (cheaper and safer
-  than rebuilding those two big tables just to get `NOT NULL`). The server
-  does **not** apply it yet (`SERVER_MAX_VERSION = 1` in `db.js`), since the
-  routes don't supply a household until step 3; `migrate-check.js` does,
-  so it can be dry-run against real data now.
-  One urgent piece of it: signup is currently open, so anyone who can
-  reach the URL (e.g. through the Cloudflare Tunnel) can create an
-  account and see the shared inventory.
+- **Multi-household support — remaining pieces.** The core has shipped
+  (see Shipped); still to do:
+  - `common_sql_commands.sh`: an optional household filter (e.g. a
+    `HOUSEHOLD` env var) on every command, so `by-name`/`catch-up` don't
+    silently mix households once there's more than one.
+  - Finer permissions, if ever wanted: `users.household_role` and
+    `can()` in `server/src/permissions.js` are the hooks.
+  - Possibly: rate-limiting signup/login and code checks (codes are 8
+    characters from a 31-letter alphabet, so guessing isn't practical, but
+    nothing slows repeated tries).
 
 ## Reference: multi-family data isolation design
 

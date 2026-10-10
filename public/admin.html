@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<script>
+// See index.html for why this runs inline, before the stylesheet.
+(function () {
+  try {
+    var t = localStorage.getItem('theme');
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+  } catch (e) {}
+})();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BackOfFridge - Admin</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>Admin</h1>
+    <a href="index.html" id="inventoryLink" class="hidden">&larr; Back to inventory</a>
+    <span id="whoami" class="stats"></span>
+    <button id="logoutBtn" class="small">Log out</button>
+  </header>
+
+  <main id="app">
+    <section class="settings-section">
+      <h2>Waiting for approval <span id="pendingCount" class="stats"></span></h2>
+      <p class="settings-desc">People who signed up without an invite code. Approve each into a household, or reject them.</p>
+      <div id="pendingList"></div>
+    </section>
+
+    <section class="settings-section">
+      <h2>New-household codes</h2>
+      <p class="settings-desc">Give one of these to someone to let them sign up and start their own household. Each works once.</p>
+      <form id="codeForm" class="manage-add">
+        <input type="text" id="codeNote" placeholder="Who it's for (optional)">
+        <button type="submit">Issue code</button>
+      </form>
+      <div id="codesList"></div>
+    </section>
+
+    <section class="settings-section">
+      <h2>Households</h2>
+      <p class="settings-desc">Each household's own invite code lets someone join it. Members see it on their Settings page.</p>
+      <form id="householdForm" class="manage-add">
+        <input type="text" id="householdName" placeholder="New household name">
+        <button type="submit">+ Add</button>
+      </form>
+      <div id="householdsList"></div>
+    </section>
+  </main>
+
+  <script src="admin.js"></script>
+</body>
+</html>

@@ -22,11 +22,15 @@ function createSession(userId) {
   return token;
 }
 
-// Returns { userId, username } for a valid, unexpired session token, else null.
+// Returns the user behind a valid, unexpired session token, else null:
+// { userId, username, householdId, status, isAdmin, role }. householdId is
+// null for the admin and for pending accounts. Read fresh on every request,
+// so approving, rejecting or granting admin takes effect immediately.
 function verifySessionToken(token) {
   if (!token) return null;
   const row = db.prepare(`
-    SELECT s.user_id AS userId, u.username AS username, s.expires_at AS expiresAt
+    SELECT s.user_id AS userId, s.expires_at AS expiresAt, u.username, u.household_id AS householdId,
+      u.status, u.is_admin AS isAdmin, u.household_role AS role
     FROM sessions s JOIN users u ON u.id = s.user_id
     WHERE s.token = ?
   `).get(token);
@@ -35,7 +39,18 @@ function verifySessionToken(token) {
     db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
     return null;
   }
-  return { userId: row.userId, username: row.username };
+  return {
+    userId: row.userId,
+    username: row.username,
+    householdId: row.householdId,
+    status: row.status,
+    isAdmin: row.isAdmin === 1,
+    role: row.role,
+  };
+}
+
+function destroyUserSessions(userId) {
+  db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
 }
 
 function destroySession(token) {
@@ -85,6 +100,7 @@ module.exports = {
   createSession,
   verifySessionToken,
   destroySession,
+  destroyUserSessions,
   getSessionTokenFromReq,
   setSessionCookie,
   clearSessionCookie,

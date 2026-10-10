@@ -131,9 +131,7 @@ test('migrate-check reports every row landing in household #1', (t) => {
   assert.match(out, /RESULT: OK/);
 });
 
-// TEMPORARY, matching SERVER_MAX_VERSION in db.js: until the routes are
-// scoped by household, the server itself must stop at version 1.
-test('the server does not apply the households migration yet', (t) => {
+test('the server applies the households migration on start', (t) => {
   const { file, db } = populatedV1(t);
   db.close();
   execFileSync(process.execPath, ['-e', "require('./src/db')"], {
@@ -141,6 +139,7 @@ test('the server does not apply the households migration yet', (t) => {
     env: { ...process.env, DB_PATH: file, LOG_PATH: path.join(path.dirname(file), 'app.log') },
   });
   const reopened = new Database(file, { readonly: true });
-  assert.strictEqual(currentVersion(reopened), 1);
+  assert.strictEqual(currentVersion(reopened), MIGRATIONS.length);
+  assert.strictEqual(reopened.prepare('SELECT COUNT(*) AS n FROM items WHERE household_id = 1').get().n, 1);
   reopened.close();
 });

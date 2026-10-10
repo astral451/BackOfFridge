@@ -151,6 +151,6 @@ Cloudflare hostname, which is a dashboard step.
 - Home wifi only to start, or a staging hostname through the tunnel too?
 - Should `staging.sh up` refresh the data automatically every time, or keep
   staging's data between branch switches unless you ask?
-- Is it worth moving production back to `main` now? Production is currently
-  running the `multi-household` branch (it's safe: the server holds the
-  household migration back), which is the situation this plan avoids.
+- Production has been running the `multi-household` branch while it was
+  built, which is the situation this plan avoids. Once that branch is merged
+  and production is back on `main`, it's a natural point to set staging up.

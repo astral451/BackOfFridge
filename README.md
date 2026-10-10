@@ -13,9 +13,10 @@ it's on wifi.
   no bundler — keeps it working in older/limited browsers like Supernote's.
 - **Auth:** real per-person accounts (username + password), not a shared secret.
   Logging in sets an httpOnly session cookie; the browser sends it automatically
-  on every request. One shared inventory — everyone who's signed up sees and
-  edits the same data (no per-family isolation; see `features.md` for why
-  that's deliberately out of scope for now). Sign up at `login.html`.
+  on every request.
+- **Households:** one deployment serves several households, each seeing only
+  its own items, history, locations and tags. Everyone in a household sees and
+  edits the same data. See "Households, signup and the admin account" below.
 
 ## Data model
 
@@ -209,6 +210,40 @@ see no new commits and skip the rebuild).
 Without Docker, from `server/`: `node scripts/migrate-check.js <path/to/inventory.db>`.
 `npm test` (in `server/`) runs the migration tests.
 
+### Households, signup and the admin account
+
+Each person belongs to one household. Signing up (at `login.html`) works
+three ways, depending on the code entered:
+
+- **A household's invite code** joins that household. Members find it on
+  their Settings page, and can make a new one there (the old one stops
+  working; nobody is removed).
+- **A new-household code** starts a new household: the person names it and
+  becomes its first member. Only the admin can issue these, and each works
+  once.
+- **No code** creates a *pending* account. It can log in but sees only a
+  "waiting for approval" page until the admin approves it into a household
+  (or rejects it). The admin page shows how many are waiting; each signup
+  also writes a `SIGNUP PENDING` line to the log.
+
+**The admin** manages households, new-household codes and pending accounts
+on `admin.html`. It's a separate, dedicated login with no household of its
+own, so it can't see anyone's items. It can only be created from the
+server's command line; there's no web route that grants admin:
+
+```bash
+docker compose exec backoffridge node scripts/admin.js create <username>
+```
+
+That prints a generated password once. Other commands: `grant <username>`
+(make an existing login an admin; it keeps its household),
+`revoke <username>`, `reset-password <username>` (any login, e.g. someone who
+forgot theirs; it also logs them out everywhere), and `list` (admins and
+pending accounts).
+
+Data from before households existed was moved into household #1, "Household
+1"; rename it from the admin page.
+
 ### Reaching it from your phone / Supernote away from home
 
 The container only listens on the port you expose; it doesn't set up remote access.
@@ -277,7 +312,8 @@ the stable setup below.
 ## Logging
 
 Every API request logs an `ACCESS` (or `ACCESS DENIED` for a bad/missing key)
-line with the method, path, and requester IP, and purchases additionally log a
+line with the method, path, requester IP, and who made it, with their
+household (`as alice (household 1)`), and purchases additionally log a
 friendlier `PURCHASED "name" x<qty> <unit> -> <location>` line. Each line is
 written both to stdout and to a local file, `<DB volume>/app.log` (so under
 Docker that's inside your `./data` bind mount, right next to `inventory.db` —
@@ -290,14 +326,20 @@ To watch it live: `docker compose logs -f` (handy to leave running in a
 ## API (for future automation, e.g. a voice-logging skill)
 
 Every route below except the `/api/auth/*` ones requires a valid session
-cookie (i.e. you're logged in as a real user — see "Auth" above).
+cookie (i.e. you're logged in as a real user — see "Auth" above). Item,
+location, tag, stats and household routes act on the logged-in user's own
+household; it comes from the session, never from the request. They return
+403 for a pending account (`reason: "pending"`) and for the admin account
+(`reason: "admin"`), and 404 for another household's item ids, exactly as
+for ids that don't exist.
 
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/api/auth/signup` | Create an account. Body `{ username, password }` (password 6+ chars). Logs you in. |
+| POST | `/api/auth/signup` | Create an account. Body `{ username, password, code?, householdName? }` (password 6+ chars). With a household invite code: joins it. With a new-household code: creates a household named `householdName`. No code: a pending account. Logs you in. |
+| POST | `/api/auth/check-code` | What an invite code does. Body `{ code }`. `{ type: "join", householdName }` or `{ type: "new_household" }`; 404 if not recognised |
 | POST | `/api/auth/login` | Log in. Body `{ username, password }` |
 | POST | `/api/auth/logout` | Log out (clears the session) |
-| GET | `/api/auth/me` | Currently logged-in username, or 401 if not logged in |
+| GET | `/api/auth/me` | Currently logged-in user: `{ username, status, isAdmin, household }`, or 401 if not logged in |
 | GET | `/api/items` | List items. Filters: `status`, `location`, `category`, `expiring_within_days` |
 | GET | `/api/items/:id` | Get one item |
 | POST | `/api/items` | Log a purchase (`name` required; `category`, `location`, `quantity`, `unit`, `purchase_date`, `expiration_date`, `notes` optional) |
@@ -311,7 +353,11 @@ cookie (i.e. you're logged in as a real user — see "Auth" above).
 | GET | `/api/locations/detail` | Locations with a count of items currently referencing each, for the manage-locations page |
 | POST | `/api/locations` | Add a new location. Body `{ name }` |
 | DELETE | `/api/locations/:name` | Remove a location — fails with a 400 if any item still references it |
+| GET | `/api/tags`, `/api/tags/detail`; POST `/api/tags`; DELETE `/api/tags/:name` | Same as the location routes, for tags |
 | GET | `/api/stats` | Counts: active / expiring soon (≤3 days) / expired |
+| GET | `/api/household` | Your household: `{ name, inviteCode, members }` |
+| POST | `/api/household/invite-code` | Replace your household's invite code |
+| | `/api/admin/*` | Admin only (households, new-household codes, pending approvals); see `server/src/routes/admin.js` |
 
 This API is intentionally the integration point for the voice-logging idea: a Claude
 Code skill or connector can call these same endpoints once you decide how you want to
