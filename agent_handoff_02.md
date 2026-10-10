@@ -173,10 +173,10 @@ probed.
 6. **Then the ops scripts**: the household filter in
    `common_sql_commands.sh`, and the household in log lines.
 
-### Decisions (confirmed with the user, 2026-10-09)
+### Decisions (confirmed with the user, 2026-10-09 and 2026-10-10)
 
-The user answered these directly; build to them rather than re-asking.
-The few points still awaiting a yes are marked.
+The user answered all of these directly; build to them rather than
+re-asking. Nothing here is still open.
 
 - **One person belongs to one household.** Use a `household_id` column on
   `users`, not a membership table.
@@ -189,7 +189,7 @@ The few points still awaiting a yes are marked.
   shown on its Settings page.
 - **Signup without a code becomes a pending account**, not a disallowed
   one. The user asked whether this could notify an admin to let them in.
-  The approach proposed, pending the user's yes:
+  The user confirmed this approach on 2026-10-10:
   - Create the account with `users.status = 'pending'`. It can't reach
     any data and sees a "waiting for approval" page.
   - The admin page shows a pending count and a list. For each account the
@@ -213,8 +213,8 @@ The few points still awaiting a yes are marked.
 
   Adding permissions later should then mean changing that one function
   and the roles, not touching every route.
-- **The admin account: a separate, dedicated login.** Proposed, pending
-  the user's yes:
+- **The admin account: a separate, dedicated login.** Confirmed by the
+  user on 2026-10-10:
   - Don't promote one of the everyday household logins. A lost phone with
     a 30-day session shouldn't carry system-wide power, and "one person,
     one household" means the admin oversees the system rather than being
@@ -227,6 +227,10 @@ The few points still awaiting a yes are marked.
     that grants admin.
   - The user also wanted to test the grant process, so `grant` should
     work on an existing login. Test it on a throwaway account.
+  - The admin account has no household (`household_id` NULL). It can
+    reach only the admin pages and routes: households, invite codes, and
+    pending approvals. Item, location and tag routes need a household, so
+    they return 403 for it rather than showing anything.
 - **Existing data.**
   - The migration moves every existing item, event, location, tag and
     user into household #1, with a placeholder name ("Household 1").
