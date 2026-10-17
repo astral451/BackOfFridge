@@ -343,7 +343,14 @@
     household" option (the user's call): new households come only from a
     new-household code, where the person names it, or from approving a
     pending account into a new one.
-    Household routes return 403 for the admin.
+    Household routes return 403 for the admin. Household choosers start
+    empty ("choose…"), with the button disabled until a household is
+    picked, rather than preselecting one. A Users page (`users.html`) lists
+    every account with its household (or none) and status, with move,
+    remove, add-to-household, **Block** (can't log in, leaves its
+    household; same state as rejecting a signup) and **Unblock** (back to
+    waiting for approval), so nobody gets lost once they're out of a
+    household.
   - **Logs** name the household on every `ACCESS` line, and signups,
     approvals, rejections and code changes each get their own line.
   - **Tests** (`npm test`): `test/isolation.test.js` runs the real API with

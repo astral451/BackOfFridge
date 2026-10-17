@@ -630,3 +630,5 @@ body:has(.bottombar) { padding-bottom: 84px; } /* room for the fixed bottom bar 
 }
 .member-row .admin-controls { flex-wrap: nowrap; }
 .member-row select { max-width: 150px; padding: 4px 6px; }
+.user-row { flex-direction: column; align-items: flex-start; gap: 6px; }
+.user-row .admin-controls select { max-width: 150px; padding: 4px 6px; }

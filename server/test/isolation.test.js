@@ -259,6 +259,7 @@ test('household members cannot use admin routes', async () => {
   for (const [method, url, body] of [
     ['get', '/api/admin/summary'], ['get', '/api/admin/households'],
     ['post', '/api/admin/users/1/move', { householdId: households.Bravo }], ['post', '/api/admin/users/1/remove'],
+    ['get', '/api/admin/users'], ['post', '/api/admin/users/1/block'], ['post', '/api/admin/users/1/unblock'],
     ['get', '/api/admin/codes'],
     ['post', '/api/admin/codes', {}], ['del', '/api/admin/codes/ABCDEFGH'], ['get', '/api/admin/pending'],
     ['post', '/api/admin/users/1/approve', { householdId: households.Alpha }], ['post', '/api/admin/users/1/reject'],
@@ -385,4 +386,43 @@ test('there is no admin route to create an empty household', async () => {
   const res = await admin.post('/api/admin/households', { name: 'Empty' });
   assert.notStrictEqual(res.status, 201);
   assert.strictEqual(db.prepare("SELECT COUNT(*) AS n FROM households WHERE name = 'Empty'").get().n, 0);
+});
+
+test('the users list shows every account, with its household or none', async () => {
+  const users = (await admin.get('/api/admin/users')).body;
+  const byName = Object.fromEntries(users.map((u) => [u.username, u]));
+  assert.strictEqual(byName.alice.householdId, households.Alpha);
+  assert.strictEqual(byName.root.isAdmin, true);
+  assert.strictEqual(byName.root.householdId, null);
+  assert.strictEqual(byName.c1.status, 'pending');
+  assert.strictEqual(byName.late.status, 'rejected', 'rejected signups stay listed');
+  assert.ok(!('password_hash' in byName.alice) && !('passwordHash' in byName.alice));
+});
+
+test('blocking a member ends their access and replaces their household code; unblocking makes them pending', async () => {
+  const amyId = db.prepare("SELECT id FROM users WHERE username = 'amy'").get().id;
+  const codeBefore = (await alice.get('/api/household')).body.inviteCode;
+
+  assert.strictEqual((await admin.post(`/api/admin/users/${amyId}/block`)).status, 204);
+  assert.strictEqual((await amy.get('/api/items')).status, 401, 'logged out everywhere');
+  assert.strictEqual((await amy.post('/api/auth/login', { username: 'amy', password: 'password1' })).status, 403);
+  assert.notStrictEqual((await alice.get('/api/household')).body.inviteCode, codeBefore);
+  assert.ok(!(await alice.get('/api/household')).body.members.includes('amy'));
+  assert.strictEqual((await admin.post(`/api/admin/users/${amyId}/block`)).status, 400, 'already blocked');
+
+  assert.strictEqual((await admin.post(`/api/admin/users/${amyId}/unblock`)).status, 204);
+  assert.strictEqual((await amy.post('/api/auth/login', { username: 'amy', password: 'password1' })).status, 200);
+  assert.strictEqual((await amy.get('/api/items')).body.reason, 'pending');
+  assert.ok((await admin.get('/api/admin/pending')).body.some((u) => u.username === 'amy'));
+  assert.strictEqual((await admin.post(`/api/admin/users/${amyId}/unblock`)).status, 404, 'not blocked any more');
+
+  // Back into Alpha via the normal approval.
+  assert.strictEqual((await admin.post(`/api/admin/users/${amyId}/approve`, { householdId: households.Alpha })).status, 200);
+  assert.strictEqual((await amy.get('/api/items')).status, 200);
+});
+
+test('admin accounts cannot be blocked from the web', async () => {
+  const rootId = db.prepare("SELECT id FROM users WHERE username = 'root'").get().id;
+  assert.strictEqual((await admin.post(`/api/admin/users/${rootId}/block`)).status, 400);
+  assert.strictEqual((await admin.get('/api/admin/summary')).status, 200);
 });

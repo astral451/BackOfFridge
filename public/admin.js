@@ -37,6 +37,33 @@
 
   function fail(err) { alert(err.message); }
 
+  // A household dropdown that starts on "choose a household…" rather than
+  // quietly preselecting one.
+  function householdSelect(choices, label) {
+    var select = el('select');
+    select.setAttribute('aria-label', label);
+    var placeholder = el('option', '', 'choose\u2026');
+    placeholder.value = '';
+    placeholder.disabled = true;
+    placeholder.selected = true;
+    select.appendChild(placeholder);
+    choices.forEach(function (o) {
+      var opt = el('option', '', o.name);
+      opt.value = String(o.id);
+      select.appendChild(opt);
+    });
+    return select;
+  }
+
+  function enableWhenChosen(select, btn) {
+    btn.disabled = true;
+    btn.title = 'Choose a household first';
+    select.addEventListener('change', function () {
+      btn.disabled = !select.value;
+      btn.title = select.value ? '' : 'Choose a household first';
+    });
+  }
+
   var households = [];
 
   // ----- Pending accounts -----
@@ -162,20 +189,18 @@
     var others = list.filter(function (o) { return o.id !== h.id; });
     if (others.length) {
       // Reads as "Move to [household ▾]": the button first, then the choice.
-      var select = el('select');
-      select.setAttribute('aria-label', 'Household to move ' + m.username + ' to');
-      others.forEach(function (o) {
-        var opt = el('option', '', o.name);
-        opt.value = String(o.id);
-        select.appendChild(opt);
-      });
-      controls.appendChild(button('Move to', function () {
+      // Nothing is chosen until someone picks, and the button stays off
+      // until they do.
+      var select = householdSelect(others, 'Household to move ' + m.username + ' to');
+      var moveBtn = button('Move to', function () {
         var target = others.filter(function (o) { return String(o.id) === select.value; })[0];
         if (!confirm('Move ' + m.username + ' from "' + h.name + '" to "' + target.name + '"?\n\n' +
           'Items they added stay with "' + h.name + '". Its invite code is replaced so they can\'t use it to rejoin; everyone else in it stays logged in and unaffected.')) return;
         apiFetch('/admin/users/' + m.id + '/move', { method: 'POST', body: JSON.stringify({ householdId: target.id }) })
           .then(refresh).catch(fail);
-      }));
+      });
+      enableWhenChosen(select, moveBtn);
+      controls.appendChild(moveBtn);
       controls.appendChild(select);
     }
 

@@ -233,7 +233,12 @@ ever created by someone signing up with a new-household code (they name
 it) or by the admin approving a pending account into a new one. Moving or
 removing a member replaces the invite code of the household they left, so
 the old code can't be used to get back in; a removed member goes back to
-waiting for approval. It's a separate, dedicated login with no household of its
+waiting for approval. `users.html` (linked from the admin page as "All
+users") lists every account with its household, or none, and its status.
+From there the admin can move, remove or add someone to a household, or
+**Block** them: a blocked account can't log in, and leaves its household.
+Blocked accounts stay listed, and **Unblock** puts them back to waiting for
+approval. Admin accounts can only be changed from the command line. It's a separate, dedicated login with no household of its
 own, so it can't see anyone's items. It can only be created from the
 server's command line; there's no web route that grants admin:
 

@@ -60,6 +60,20 @@ router.delete('/codes/:code', (req, res) => {
   res.status(204).end();
 });
 
+// --- Users ---------------------------------------------------------------
+
+// GET /api/admin/users - every account, with its household (or none) and
+// status, for the Users page. Blocked accounts stay listed here so they can
+// be unblocked later.
+router.get('/users', (req, res) => {
+  res.json(db.prepare(`
+    SELECT u.id, u.username, u.status, u.is_admin AS isAdmin, u.created_at AS createdAt,
+      u.household_id AS householdId, h.name AS householdName
+    FROM users u LEFT JOIN households h ON h.id = u.household_id
+    ORDER BY u.username COLLATE NOCASE
+  `).all().map((u) => ({ ...u, isAdmin: u.isAdmin === 1 })));
+});
+
 // --- Pending accounts ----------------------------------------------------
 
 router.get('/pending', (req, res) => {
@@ -141,6 +155,39 @@ router.post('/users/:id/remove', (req, res) => {
     replaceCodeAfterLeaving(from.id);
   })();
   log(`REMOVED "${user.username}" from household ${from.id} "${from.name}" by admin ${req.username} (now waiting for approval); invite code replaced`);
+  res.status(204).end();
+});
+
+// POST /api/admin/users/:id/block - the account can no longer log in, and
+// leaves its household if it's in one (whose invite code is then replaced,
+// as for Remove). Same state as rejecting a pending signup. Admin accounts
+// can't be blocked from here; use scripts/admin.js revoke first.
+router.post('/users/:id/block', (req, res) => {
+  const user = db.prepare(`
+    SELECT id, username, household_id AS householdId, status, is_admin AS isAdmin FROM users WHERE id = ?
+  `).get(req.params.id);
+  if (!user) return res.status(404).json({ error: 'no account like that' });
+  if (user.isAdmin) return res.status(400).json({ error: 'admin accounts are managed from the server command line' });
+  if (user.status === 'rejected') return res.status(400).json({ error: 'already blocked' });
+
+  const from = user.householdId ? households.getHousehold(user.householdId) : null;
+  db.transaction(() => {
+    db.prepare("UPDATE users SET status = 'rejected', household_id = NULL WHERE id = ?").run(user.id);
+    if (from) replaceCodeAfterLeaving(from.id);
+  })();
+  auth.destroyUserSessions(user.id);
+  log(`BLOCKED "${user.username}" by admin ${req.username}` +
+    (from ? `; left household ${from.id} "${from.name}", invite code replaced` : ''));
+  res.status(204).end();
+});
+
+// POST /api/admin/users/:id/unblock - a blocked (or rejected) account goes
+// back to waiting for approval, to be added to a household from there.
+router.post('/users/:id/unblock', (req, res) => {
+  const user = db.prepare("SELECT id, username FROM users WHERE id = ? AND status = 'rejected'").get(req.params.id);
+  if (!user) return res.status(404).json({ error: 'no blocked account like that' });
+  db.prepare("UPDATE users SET status = 'pending' WHERE id = ?").run(user.id);
+  log(`UNBLOCKED "${user.username}" by admin ${req.username} (now waiting for approval)`);
   res.status(204).end();
 });
 

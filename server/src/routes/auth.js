@@ -100,8 +100,8 @@ router.post('/login', (req, res) => {
     return res.status(401).json({ error: 'invalid username or password' });
   }
   if (user.status === 'rejected') {
-    log(`LOGIN REFUSED "${username}" from ${req.ip} - account was not approved`);
-    return res.status(403).json({ error: 'this account was not approved' });
+    log(`LOGIN REFUSED "${username}" from ${req.ip} - account is blocked`);
+    return res.status(403).json({ error: 'this account doesn\'t have access; ask the admin' });
   }
 
   const token = auth.createSession(user.id);
