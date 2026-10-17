@@ -217,7 +217,8 @@ three ways, depending on the code entered:
 
 - **A household's invite code** joins that household. Members find it on
   their Settings page, and can make a new one there (the old one stops
-  working; nobody is removed).
+  working; nobody is removed). Settings is also where members rename their
+  household.
 - **A new-household code** starts a new household: the person names it and
   becomes its first member. Only the admin can issue these, and each works
   once.
@@ -226,8 +227,8 @@ three ways, depending on the code entered:
   (or rejects it). The admin page shows how many are waiting; each signup
   also writes a `SIGNUP PENDING` line to the log.
 
-**The admin** manages households, new-household codes and pending accounts
-on `admin.html`. It's a separate, dedicated login with no household of its
+**The admin** creates households, issues new-household codes and handles
+pending accounts on `admin.html`. It's a separate, dedicated login with no household of its
 own, so it can't see anyone's items. It can only be created from the
 server's command line; there's no web route that grants admin:
 
@@ -242,7 +243,7 @@ forgot theirs; it also logs them out everywhere), and `list` (admins and
 pending accounts).
 
 Data from before households existed was moved into household #1, "Household
-1"; rename it from the admin page.
+1"; any member can rename it from Settings.
 
 ### Reaching it from your phone / Supernote away from home
 
@@ -357,6 +358,7 @@ for ids that don't exist.
 | GET | `/api/stats` | Counts: active / expiring soon (≤3 days) / expired |
 | GET | `/api/household` | Your household: `{ name, inviteCode, members }` |
 | POST | `/api/household/invite-code` | Replace your household's invite code |
+| PATCH | `/api/household` | Rename your household. Body `{ name }` |
 | | `/api/admin/*` | Admin only (households, new-household codes, pending approvals); see `server/src/routes/admin.js` |
 
 This API is intentionally the integration point for the voice-logging idea: a Claude

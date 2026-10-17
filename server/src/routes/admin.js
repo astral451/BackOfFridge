@@ -1,5 +1,6 @@
-// Admin-only routes: households, new-household codes, and pending account
-// approvals. Mounted behind requireAdmin in index.js. The admin is
+// Admin-only routes: creating households, new-household codes, and pending
+// account approvals. (Renaming a household is up to its members: see
+// routes/household.js.) Mounted behind requireAdmin in index.js. The admin is
 // system-wide and has no household of its own, so none of this touches
 // items, locations or tags.
 
@@ -38,19 +39,6 @@ router.post('/households', (req, res) => {
     const h = households.createHousehold(req.body.name);
     log(`HOUSEHOLD CREATED ${h.id} "${h.name}" by admin ${req.username}`);
     res.status(201).json({ ...h, inviteCode: households.formatCode(h.inviteCode) });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-// PATCH /api/admin/households/:id - body: { name }
-router.patch('/households/:id', (req, res) => {
-  const before = households.getHousehold(req.params.id);
-  if (!before) return res.status(404).json({ error: 'not found' });
-  try {
-    const h = households.renameHousehold(before.id, req.body.name);
-    log(`HOUSEHOLD RENAMED ${h.id} "${before.name}" -> "${h.name}" by admin ${req.username}`);
-    res.json({ ...h, inviteCode: households.formatCode(h.inviteCode) });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

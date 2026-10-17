@@ -236,6 +236,7 @@ const HOUSEHOLD_ENDPOINTS = [
   ['get', '/api/stats'],
   ['get', '/api/household'],
   ['post', '/api/household/invite-code', {}],
+  ['patch', '/api/household', { name: 'X' }],
 ];
 
 test('a pending account gets no household data', async () => {
@@ -257,7 +258,7 @@ test('the admin account gets no household data', async () => {
 test('household members cannot use admin routes', async () => {
   for (const [method, url, body] of [
     ['get', '/api/admin/summary'], ['get', '/api/admin/households'], ['post', '/api/admin/households', { name: 'X' }],
-    ['patch', `/api/admin/households/${households.Alpha}`, { name: 'X' }], ['get', '/api/admin/codes'],
+    ['get', '/api/admin/codes'],
     ['post', '/api/admin/codes', {}], ['del', '/api/admin/codes/ABCDEFGH'], ['get', '/api/admin/pending'],
     ['post', '/api/admin/users/1/approve', { householdId: households.Alpha }], ['post', '/api/admin/users/1/reject'],
   ]) {
@@ -284,6 +285,18 @@ test('each household sees only its own invite code and members', async () => {
   assert.notStrictEqual(fresh.inviteCode, b.inviteCode);
   assert.strictEqual((await client().post('/api/auth/check-code', { code: b.inviteCode })).status, 404);
   assert.deepStrictEqual(fresh.members, ['bob']);
+});
+
+test('members rename their own household, and only their own', async () => {
+  const renamed = await amy.patch('/api/household', { name: '  The Alphas  ' });
+  assert.strictEqual(renamed.status, 200);
+  assert.strictEqual(renamed.body.name, 'The Alphas');
+  assert.strictEqual((await alice.get('/api/auth/me')).body.household.name, 'The Alphas');
+  assert.strictEqual((await bob.get('/api/household')).body.name, 'Bravo');
+  assert.strictEqual((await alice.patch('/api/household', { name: '   ' })).status, 400);
+  // The admin creates households but no longer renames them.
+  assert.notStrictEqual((await admin.patch(`/api/admin/households/${households.Alpha}`, { name: 'X' })).status, 200);
+  assert.strictEqual((await alice.get('/api/household')).body.name, 'The Alphas');
 });
 
 test('a new-household code works once', async () => {

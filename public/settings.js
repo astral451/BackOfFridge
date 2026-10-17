@@ -69,6 +69,32 @@
     apiFetch('/household').then(renderHousehold).catch(function (err) { alert(err.message); });
   }
 
+  // Rename in place: the name swaps for a text box, Save or Cancel swaps it
+  // back.
+  var renameForm = document.getElementById('renameForm');
+  var renameInput = document.getElementById('renameInput');
+  function showRename(open) {
+    renameForm.classList.toggle('hidden', !open);
+    document.querySelector('.household-title').classList.toggle('hidden', open);
+    if (open) {
+      renameInput.value = document.getElementById('householdName').textContent;
+      renameInput.focus();
+    }
+  }
+  document.getElementById('renameHouseholdBtn').addEventListener('click', function () { showRename(true); });
+  document.getElementById('renameCancel').addEventListener('click', function () { showRename(false); });
+  renameForm.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var name = renameInput.value.trim();
+    if (!name) return;
+    apiFetch('/household', { method: 'PATCH', body: JSON.stringify({ name: name }) })
+      .then(function (h) {
+        renderHousehold(h);
+        showRename(false);
+      })
+      .catch(function (err) { alert(err.message); });
+  });
+
   document.getElementById('regenerateCodeBtn').addEventListener('click', function () {
     if (!confirm('Make a new invite code? The current one will stop working.')) return;
     apiFetch('/household/invite-code', { method: 'POST' })

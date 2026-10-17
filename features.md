@@ -330,13 +330,14 @@
     approval" page (`pending.html`) until the admin approves it into a
     household or rejects it. The signup form says what a code does as it's
     typed. Settings shows the household's members and invite code, with a
-    button for a new code.
+    button for a new code, and lets any member rename the household (the
+    user decided renaming belongs to the household, not the admin).
   - **Admin:** a separate, dedicated login with no household, created only
     from the server's command line (`scripts/admin.js create|grant|revoke|
     reset-password|list`; passwords are generated and printed once).
     `admin.html` lists pending accounts (approve into an existing or new
     household, or reject), issues and revokes new-household codes, and
-    creates and renames households. Household routes return 403 for it.
+    creates households. Household routes return 403 for it.
   - **Logs** name the household on every `ACCESS` line, and signups,
     approvals, rejections and code changes each get their own line.
   - **Tests** (`npm test`): `test/isolation.test.js` runs the real API with
@@ -346,7 +347,7 @@
     codes, approval, rejection, and command-line grant/revoke. It was
     checked by deliberately removing household filters from the queries
     and confirming the tests fail. Plus a Playwright pass of signup (both
-    code kinds and a bad code), pending, admin approve/rename, settings and
+    code kinds and a bad code), pending, admin approve, settings rename and
     the existing pages at 390px and 1000px.
 
 ## Roadmap

@@ -9,6 +9,7 @@ const ACTIONS = [
   'locations:write',  // add/delete managed locations
   'tags:write',       // add/delete managed tags
   'household:invite', // see and regenerate the household's invite code
+  'household:rename', // rename the household
 ];
 
 function isActiveMember(user) {

@@ -144,12 +144,6 @@
         h.memberCount + ' member' + (h.memberCount === 1 ? '' : 's') + ' · ' +
         h.itemCount + ' item' + (h.itemCount === 1 ? '' : 's') + ' · invite code ' + h.inviteCode));
       row.appendChild(info);
-      row.appendChild(button('Rename', function () {
-        var name = prompt('New name for "' + h.name + '":', h.name);
-        if (name === null || !name.trim() || name.trim() === h.name) return;
-        apiFetch('/admin/households/' + h.id, { method: 'PATCH', body: JSON.stringify({ name: name.trim() }) })
-          .then(refresh).catch(fail);
-      }));
       container.appendChild(row);
     });
   }

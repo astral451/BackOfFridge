@@ -567,6 +567,14 @@ body:has(.bottombar) { padding-bottom: 84px; } /* room for the fixed bottom bar 
 .settings-section h2 { font-size: 0.95rem; margin: 0 0 4px; }
 .settings-desc { font-size: 0.8rem; color: var(--muted); margin: 0 0 10px; }
 .settings-desc:last-child { margin-bottom: 0; }
+.household-title { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; }
+.household-title h2 { margin: 0; }
+#renameForm { margin-bottom: 10px; }
+#renameForm input { min-width: 0; }
+#renameForm button.small {
+  background: var(--surface); color: var(--text); border: 1px solid var(--border);
+  padding: 0 10px; font-weight: 600;
+}
 .invite-code {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 1.5rem; font-weight: 700; letter-spacing: 0.08em;

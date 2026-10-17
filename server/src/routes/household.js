@@ -28,4 +28,18 @@ router.post('/invite-code', requirePermission('household:invite'), (req, res) =>
   res.json(describe(household));
 });
 
+// PATCH /api/household - body: { name }. Any member can rename their own
+// household; the admin creates households but doesn't rename them.
+router.patch('/', requirePermission('household:rename'), (req, res) => {
+  const before = households.getHousehold(req.householdId);
+  let household;
+  try {
+    household = households.renameHousehold(req.householdId, req.body.name);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+  log(`HOUSEHOLD RENAMED ${req.householdId} "${before.name}" -> "${household.name}" by ${req.username}`);
+  res.json(describe(household));
+});
+
 module.exports = router;
