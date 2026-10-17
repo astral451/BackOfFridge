@@ -69,7 +69,7 @@ function regenerateInviteCode(id) {
 
 function householdMembers(id) {
   return db.prepare(`
-    SELECT username, household_role AS role, created_at AS createdAt FROM users
+    SELECT id, username, household_role AS role, created_at AS createdAt FROM users
     WHERE household_id = ? AND status = 'active' ORDER BY username
   `).all(id);
 }

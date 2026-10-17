@@ -227,8 +227,13 @@ three ways, depending on the code entered:
   (or rejects it). The admin page shows how many are waiting; each signup
   also writes a `SIGNUP PENDING` line to the log.
 
-**The admin** creates households, issues new-household codes and handles
-pending accounts on `admin.html`. It's a separate, dedicated login with no household of its
+**The admin** issues new-household codes, handles pending accounts, and
+moves or removes household members, on `admin.html`. Households are only
+ever created by someone signing up with a new-household code (they name
+it) or by the admin approving a pending account into a new one. Moving or
+removing a member replaces the invite code of the household they left, so
+the old code can't be used to get back in; a removed member goes back to
+waiting for approval. It's a separate, dedicated login with no household of its
 own, so it can't see anyone's items. It can only be created from the
 server's command line; there's no web route that grants admin:
 

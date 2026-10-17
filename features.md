@@ -337,7 +337,13 @@
     reset-password|list`; passwords are generated and printed once).
     `admin.html` lists pending accounts (approve into an existing or new
     household, or reject), issues and revokes new-household codes, and
-    creates households. Household routes return 403 for it.
+    moves members between households or removes them (back to waiting for
+    approval; the household they left gets a new invite code so the old one
+    can't be used to rejoin). There's deliberately no "create an empty
+    household" option (the user's call): new households come only from a
+    new-household code, where the person names it, or from approving a
+    pending account into a new one.
+    Household routes return 403 for the admin.
   - **Logs** name the household on every `ACCESS` line, and signups,
     approvals, rejections and code changes each get their own line.
   - **Tests** (`npm test`): `test/isolation.test.js` runs the real API with

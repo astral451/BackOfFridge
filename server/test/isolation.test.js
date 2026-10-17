@@ -257,7 +257,8 @@ test('the admin account gets no household data', async () => {
 
 test('household members cannot use admin routes', async () => {
   for (const [method, url, body] of [
-    ['get', '/api/admin/summary'], ['get', '/api/admin/households'], ['post', '/api/admin/households', { name: 'X' }],
+    ['get', '/api/admin/summary'], ['get', '/api/admin/households'],
+    ['post', '/api/admin/users/1/move', { householdId: households.Bravo }], ['post', '/api/admin/users/1/remove'],
     ['get', '/api/admin/codes'],
     ['post', '/api/admin/codes', {}], ['del', '/api/admin/codes/ABCDEFGH'], ['get', '/api/admin/pending'],
     ['post', '/api/admin/users/1/approve', { householdId: households.Alpha }], ['post', '/api/admin/users/1/reject'],
@@ -330,4 +331,58 @@ test('admin grant and revoke from the command line take effect immediately', asy
   assert.strictEqual((await bob.get('/api/items')).status, 200, 'keeps their household');
   runAdminScript('revoke', 'bob');
   assert.strictEqual((await bob.get('/api/admin/summary')).status, 403);
+});
+
+test('the admin can move a member to another household', async () => {
+  const before = (await admin.get('/api/admin/households')).body;
+  const charlie = before.find((h) => h.name === 'Charlie');
+  const bravo = before.find((h) => h.id === households.Bravo);
+  const c1 = charlie.members.find((m) => m.username === 'c1');
+
+  const c1Client = client();
+  await c1Client.post('/api/auth/login', { username: 'c1', password: 'password1' });
+
+  const moved = await admin.post(`/api/admin/users/${c1.id}/move`, { householdId: households.Bravo });
+  assert.strictEqual(moved.status, 200);
+  const items = await c1Client.get('/api/items');
+  assert.ok(items.body.length > 0 && items.body.every((i) => ids.B.includes(i.id)), 'sees Bravo items now');
+
+  const after = (await admin.get('/api/admin/households')).body;
+  assert.notStrictEqual(after.find((h) => h.id === charlie.id).inviteCode, charlie.inviteCode, 'left household gets a new code');
+  assert.strictEqual(after.find((h) => h.id === bravo.id).inviteCode, bravo.inviteCode, 'joined household keeps its code');
+  assert.ok(after.find((h) => h.id === bravo.id).members.some((m) => m.username === 'c1'));
+
+  assert.strictEqual((await admin.post(`/api/admin/users/${c1.id}/move`, { householdId: households.Bravo })).status, 400, 'already there');
+  assert.strictEqual((await admin.post(`/api/admin/users/${c1.id}/move`, { householdId: 99999 })).status, 400);
+});
+
+test('the admin can remove a member, who goes back to waiting for approval', async () => {
+  const list = (await admin.get('/api/admin/households')).body;
+  const bravo = list.find((h) => h.id === households.Bravo);
+  const c1 = bravo.members.find((m) => m.username === 'c1');
+  const c1Client = client();
+  await c1Client.post('/api/auth/login', { username: 'c1', password: 'password1' });
+
+  assert.strictEqual((await admin.post(`/api/admin/users/${c1.id}/remove`)).status, 204);
+  const items = await c1Client.get('/api/items');
+  assert.strictEqual(items.status, 403);
+  assert.strictEqual(items.body.reason, 'pending');
+  assert.ok((await admin.get('/api/admin/pending')).body.some((u) => u.username === 'c1'));
+
+  const after = (await admin.get('/api/admin/households')).body.find((h) => h.id === households.Bravo);
+  assert.notStrictEqual(after.inviteCode, bravo.inviteCode, 'household gets a new code');
+  assert.ok(!after.members.some((m) => m.username === 'c1'));
+  // Bravo's items are untouched.
+  assert.deepStrictEqual((await bob.get('/api/items')).body.map((i) => i.id).sort(), [...ids.B].sort());
+
+  // Only household members can be moved or removed.
+  assert.strictEqual((await admin.post(`/api/admin/users/${c1.id}/remove`)).status, 404);
+  const rootId = db.prepare("SELECT id FROM users WHERE username = 'root'").get().id;
+  assert.strictEqual((await admin.post(`/api/admin/users/${rootId}/move`, { householdId: households.Alpha })).status, 404);
+});
+
+test('there is no admin route to create an empty household', async () => {
+  const res = await admin.post('/api/admin/households', { name: 'Empty' });
+  assert.notStrictEqual(res.status, 201);
+  assert.strictEqual(db.prepare("SELECT COUNT(*) AS n FROM households WHERE name = 'Empty'").get().n, 0);
 });

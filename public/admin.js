@@ -145,18 +145,48 @@
         h.itemCount + ' item' + (h.itemCount === 1 ? '' : 's') + ' · invite code ' + h.inviteCode));
       row.appendChild(info);
       container.appendChild(row);
+
+      h.members.forEach(function (m) {
+        container.appendChild(memberRow(h, m, list));
+      });
     });
   }
 
-  document.getElementById('householdForm').addEventListener('submit', function (e) {
-    e.preventDefault();
-    var input = document.getElementById('householdName');
-    var name = input.value.trim();
-    if (!name) return;
-    apiFetch('/admin/households', { method: 'POST', body: JSON.stringify({ name: name }) })
-      .then(function () { input.value = ''; refresh(); })
-      .catch(fail);
-  });
+  // One member of a household: move them to another household, or remove
+  // them (back to waiting for approval).
+  function memberRow(h, m, list) {
+    var row = el('div', 'manage-row admin-row member-row');
+    row.appendChild(el('div', '', m.username));
+    var controls = el('div', 'admin-controls');
+
+    var others = list.filter(function (o) { return o.id !== h.id; });
+    if (others.length) {
+      // Reads as "Move to [household ▾]": the button first, then the choice.
+      var select = el('select');
+      select.setAttribute('aria-label', 'Household to move ' + m.username + ' to');
+      others.forEach(function (o) {
+        var opt = el('option', '', o.name);
+        opt.value = String(o.id);
+        select.appendChild(opt);
+      });
+      controls.appendChild(button('Move to', function () {
+        var target = others.filter(function (o) { return String(o.id) === select.value; })[0];
+        if (!confirm('Move ' + m.username + ' from "' + h.name + '" to "' + target.name + '"?\n\n' +
+          'Items stay with "' + h.name + '", and it gets a new invite code.')) return;
+        apiFetch('/admin/users/' + m.id + '/move', { method: 'POST', body: JSON.stringify({ householdId: target.id }) })
+          .then(refresh).catch(fail);
+      }));
+      controls.appendChild(select);
+    }
+
+    controls.appendChild(button('Remove', function () {
+      if (!confirm('Remove ' + m.username + ' from "' + h.name + '"?\n\n' +
+        'They go back to waiting for approval, and "' + h.name + '" gets a new invite code.')) return;
+      apiFetch('/admin/users/' + m.id + '/remove', { method: 'POST' }).then(refresh).catch(fail);
+    }));
+    row.appendChild(controls);
+    return row;
+  }
 
   function refresh() {
     return apiFetch('/admin/households').then(function (list) {
