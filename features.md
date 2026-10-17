@@ -470,6 +470,20 @@ priority — a Low item isn't necessarily more worth doing than a High one.
   production backup, so the real app stays up and real data stays
   untouched while a feature is tested on the phone. Scoped in
   `staging_plan.md`; not built yet.
+- **Archive a household (Low/Medium)** — not built; the user wants it
+  for later. Today a household can't be removed or archived. Plan:
+  migration 003 adds `households.archived_at`. An archived household's
+  members can't reach its data (the same checks that block pending
+  accounts, with an "archived" page instead of "waiting"), its invite code
+  stops working, and the admin page lists it under a collapsed "Archived"
+  section with **Unarchive**, which brings it back exactly as it was.
+  `common_sql_commands.sh` skips archived households by default. Nothing
+  is deleted: every row keeps its `household_id`, so archiving is just
+  switching a household off. A true delete (every item, event, location,
+  tag and code for the household) is possible but permanent, recoverable
+  only by restoring a backup, which rolls back every household. If it's
+  ever wanted, make it "delete an archived household" rather than a
+  one-tap button.
 - **Multi-household support — remaining pieces.** The core has shipped
   (see Shipped); still to do:
   - `common_sql_commands.sh`: an optional household filter (e.g. a
