@@ -172,7 +172,7 @@
       controls.appendChild(button('Move to', function () {
         var target = others.filter(function (o) { return String(o.id) === select.value; })[0];
         if (!confirm('Move ' + m.username + ' from "' + h.name + '" to "' + target.name + '"?\n\n' +
-          'Items stay with "' + h.name + '", and it gets a new invite code.')) return;
+          'Items they added stay with "' + h.name + '". Its invite code is replaced so they can\'t use it to rejoin; everyone else in it stays logged in and unaffected.')) return;
         apiFetch('/admin/users/' + m.id + '/move', { method: 'POST', body: JSON.stringify({ householdId: target.id }) })
           .then(refresh).catch(fail);
       }));
@@ -181,7 +181,7 @@
 
     controls.appendChild(button('Remove', function () {
       if (!confirm('Remove ' + m.username + ' from "' + h.name + '"?\n\n' +
-        'They go back to waiting for approval, and "' + h.name + '" gets a new invite code.')) return;
+        'They go back to waiting for approval. "' + h.name + '"\'s invite code is replaced so they can\'t use it to rejoin; everyone else in it stays logged in and unaffected.')) return;
       apiFetch('/admin/users/' + m.id + '/remove', { method: 'POST' }).then(refresh).catch(fail);
     }));
     row.appendChild(controls);
