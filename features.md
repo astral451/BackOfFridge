@@ -77,7 +77,7 @@
   Verified with curl (signup/login/logout, wrong password rejected, a
   second user's action correctly attributed in another user's view of the
   same item's history) and a headless-browser run of the actual signup →
-  redirect → logged-in flow. Full multi-family isolation is shelved below
+  redirect → logged-in flow. Full multi-family isolation was shelved at the time (since built: see "Multi-household support" below)
   as a distinct, larger, "only if actually needed" item — it isn't required
   for this and wasn't built.
 - Location matching is now case-insensitive — `locations.name` has a
@@ -200,9 +200,9 @@
   and rebuilds the Docker image only if the pull actually moved `HEAD`
   (otherwise just restarts, keeping a no-op run fast). Refuses to pull over
   an uncommitted local change rather than risking a mid-script merge
-  conflict. Each backup is tagged with a placeholder `SCHEMA_VERSION` file
-  (currently just `"unversioned"`), ready for the real schema-version
-  tracking system below once that exists.
+  conflict. Each backup is tagged with a `SCHEMA_VERSION` file: the
+  database's real schema version since schema-version tracking shipped
+  (below), `"unversioned"` before that.
 - Usage-history query tool (`common_sql_commands.sh`) — canned `sqlite3`
   queries over the `item_events` table for "what's actually being used"
   questions without hand-writing SQL each time: most-purchased items,
@@ -281,16 +281,109 @@
   menu inside it and trapped its z-index within the row. Now only the
   row's contents are faded, not the menu.
 
+- Real schema-version tracking — the first step of the multi-household
+  work. Schema changes are now numbered migrations in
+  `server/src/migrations/` (listed in order in its `index.js`), run by
+  `server/src/migrate.js` at startup. Each runs once, inside its own
+  transaction, and is recorded in a `schema_migrations` table (`version`,
+  `name`, `applied_at`); a migration that throws partway rolls back
+  completely. Migration 001 ("baseline") is the old ad-hoc
+  `PRAGMA table_info`/`ALTER` startup blocks from `db.js`, moved unchanged,
+  so an existing database is just recorded as version 1 (verified: a
+  database made by the previous code ends up byte-for-byte the same in
+  schema and rows as restarting the previous code on it). The server
+  refuses to start, with a clear log line, if the database is newer than
+  the code's highest migration. `restart.sh` writes the real version into
+  each backup's `SCHEMA_VERSION` (read through a throwaway container, so no
+  host `sqlite3` is needed). `server/scripts/migrate-check.js <db>` is a dry
+  run against a copy of a real database: version and row counts before and
+  after (per household too, once that column exists), whether every
+  existing row came through unchanged, and an integrity check; it never
+  writes to the file it's given. `npm test` in `server/` runs the
+  migration tests (`node:test`, no new dependency): fresh database, old
+  unversioned database, re-run is a no-op, downgrade refused, partial
+  failure rolls back, and the check script leaves its input untouched.
+  See README "Schema versions and migrations" for the dry-run steps.
+
+- Multi-household support — several households share one deployment, each
+  seeing only its own items, history, locations and tags (design:
+  "Reference: multi-family data isolation design" below; plan and the
+  user's decisions: `agent_handoff_02.md`).
+  - **Schema:** migration 002 (households, new-household codes,
+    `household_id` on users/items/item_events, locations and tags keyed by
+    `(household_id, name)`, `users.status`/`is_admin`/`household_role`).
+    Existing data all moved into household #1, "Household 1", verified with
+    `migrate-check.js` against a real backup (267 items, 806 events, 12
+    locations, 7 tags, 2 users, every row unchanged) before the server was
+    allowed to apply it. Triggers stop an item or event being written
+    without a household or moved to another one.
+  - **Scoping:** the household comes only from the session
+    (`req.householdId`, set in `index.js`). All household data goes through
+    `server/src/store.js`, where every function takes the household id as
+    its first argument and throws without one. Another household's item
+    ids return the same 404 as missing ones. Mutating routes go through
+    one `can(user, action)` check (`server/src/permissions.js`), which today
+    allows every active member everything.
+  - **Signup:** a household's invite code joins it; an admin-issued
+    new-household code (single use) starts a new one that the person
+    names; no code makes a pending account that sees only a "waiting for
+    approval" page (`pending.html`) until the admin approves it into a
+    household or rejects it. The signup form says what a code does as it's
+    typed. Settings shows the household's members and invite code, with a
+    button for a new code, and lets any member rename the household (the
+    user decided renaming belongs to the household, not the admin).
+  - **Admin:** a separate, dedicated login with no household, created only
+    from the server's command line (`scripts/admin.js create|grant|revoke|
+    reset-password|list`; passwords are generated and printed once).
+    `admin.html` lists pending accounts (approve into an existing or new
+    household, or reject), issues and revokes new-household codes, and
+    moves members between households or removes them (back to waiting for
+    approval; the household they left gets a new invite code so the old one
+    can't be used to rejoin). There's deliberately no "create an empty
+    household" option (the user's call): new households come only from a
+    new-household code, where the person names it, or from approving a
+    pending account into a new one.
+    Household routes return 403 for the admin. Household choosers start
+    empty ("choose…"), with the button disabled until a household is
+    picked, rather than preselecting one. A Users page (`users.html`) lists
+    every account with its household (or none) and status, with move,
+    remove, add-to-household, **Block** (can't log in, leaves its
+    household; same state as rejecting a signup) and **Unblock** (back to
+    waiting for approval), so nobody gets lost once they're out of a
+    household.
+  - **Logs** name the household on every `ACCESS` line, and signups,
+    approvals, rejections and code changes each get their own line.
+  - **`common_sql_commands.sh` household filter:** `HOUSEHOLD=<id or name>`
+    limits any command to one household, and a new `households` command
+    lists them with ids, members and item counts. The script scopes by
+    creating temporary `items`/`item_events` views for that one `sqlite3`
+    run, which hide the real tables, so none of the queries had to be
+    rewritten and nothing is written to the database. Without `HOUSEHOLD`
+    every household is covered together, as before, with a warning on
+    stderr whenever there's more than one. Built once the second household
+    went live (below), since `by-name` and `catch-up` were already mixing
+    the two households' data.
+  - **In use:** stable in production on the `multi-household` branch. As of
+    2026-10-23 a second household (another client, not the original user's)
+    is live, with items in several locations. Its first quick-add dictation
+    worked first time (`dictation_examples.md` example 7).
+  - **Tests** (`npm test`): `test/isolation.test.js` runs the real API with
+    two households sharing location/tag names and checks every household
+    endpoint and every `:id` route (404, item unchanged), client-sent
+    household ids being ignored, pending/admin/anonymous access, single-use
+    codes, approval, rejection, and command-line grant/revoke. It was
+    checked by deliberately removing household filters from the queries
+    and confirming the tests fail. Plus a Playwright pass of signup (both
+    code kinds and a bad code), pending, admin approve, settings rename and
+    the existing pages at 390px and 1000px.
+
 ## Roadmap
 
 Difficulty grades below (Low/Medium/High) are rough cost/complexity, not
 priority — a Low item isn't necessarily more worth doing than a High one.
 
-- **Location customization** — shipped for a single household (locations are
-  now a managed list with add/delete). If full multi-family isolation is
-  ever built (see the shelved item below), this list would need to be
-  scoped per family like everything else — not needed for the single
-  shared inventory this app has today.
+- **Location customization** — shipped: locations (and tags) are a managed
+  list with add/delete, each household with its own.
 - **Barcode/visual scanning** — scan a barcode or product photo to quickly
   re-up an item instead of retyping it (builds on "Buy again").
 - **Photo capture + recall (Low/Medium)** — **decided: manual only, no
@@ -392,29 +485,33 @@ priority — a Low item isn't necessarily more worth doing than a High one.
   width; what matters at a glance is whether something's expired or close
   to it, and how much is left, both already conveyed by the row's
   background tint and the stepper.
-- **Real schema-version tracking** — now the recommended first step of
-  the multi-household work (see that entry below). Schema changes today
-  are ad-hoc, guarded `ALTER TABLE`/`CREATE TABLE IF NOT EXISTS` blocks checked at
-  startup in `server/src/db.js` (safe and idempotent, but no migrations
-  table, no ordered/named history, no way to tell which of the accumulated
-  migrations a given database file has already had applied). Planned
-  approach: a `schema_migrations` table (`version`, `applied_at`), the
-  existing ad-hoc blocks pulled out into numbered migration files, only
-  the ones not yet recorded run at startup. `restart.sh` already writes a
-  placeholder `SCHEMA_VERSION` file into every backup, ready to be swapped
-  for the real applied version once this exists.
-- **Multi-household support — NEXT UP (High).** Separate households
-  sharing one deployment, each with private data. It was previously
-  shelved, but as of 2026-10-09 the user wants it built next. The per-user
-  login above deliberately did *not* include this: it's one shared
-  inventory with per-person accounts. The design below (data isolation
-  approach and the security decision behind it) stands. The concrete
-  plan is in `agent_handoff_02.md`: every table and query that needs
-  scoping, a suggested order (real schema-version tracking first), and
-  the decisions to confirm with the user before coding.
-  One urgent piece of it: signup is currently open, so anyone who can
-  reach the URL (e.g. through the Cloudflare Tunnel) can create an
-  account and see the shared inventory.
+- **Staging copy for testing branches (Low/Medium)** — a second copy of
+  the app on the same server (git worktree, separate Compose project,
+  port 3001) running the branch under test against a copy of the newest
+  production backup, so the real app stays up and real data stays
+  untouched while a feature is tested on the phone. Scoped in
+  `staging_plan.md`; not built yet.
+- **Archive a household (Low/Medium)** — not built; the user wants it
+  for later. Today a household can't be removed or archived. Plan:
+  migration 003 adds `households.archived_at`. An archived household's
+  members can't reach its data (the same checks that block pending
+  accounts, with an "archived" page instead of "waiting"), its invite code
+  stops working, and the admin page lists it under a collapsed "Archived"
+  section with **Unarchive**, which brings it back exactly as it was.
+  `common_sql_commands.sh` skips archived households by default. Nothing
+  is deleted: every row keeps its `household_id`, so archiving is just
+  switching a household off. A true delete (every item, event, location,
+  tag and code for the household) is possible but permanent, recoverable
+  only by restoring a backup, which rolls back every household. If it's
+  ever wanted, make it "delete an archived household" rather than a
+  one-tap button.
+- **Multi-household support — remaining pieces.** The core has shipped
+  (see Shipped); still to do:
+  - Finer permissions, if ever wanted: `users.household_role` and
+    `can()` in `server/src/permissions.js` are the hooks.
+  - Possibly: rate-limiting signup/login and code checks (codes are 8
+    characters from a 31-letter alphabet, so guessing isn't practical, but
+    nothing slows repeated tries).
 
 ## Reference: multi-family data isolation design
 

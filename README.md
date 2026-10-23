@@ -13,9 +13,10 @@ it's on wifi.
   no bundler — keeps it working in older/limited browsers like Supernote's.
 - **Auth:** real per-person accounts (username + password), not a shared secret.
   Logging in sets an httpOnly session cookie; the browser sends it automatically
-  on every request. One shared inventory — everyone who's signed up sees and
-  edits the same data (no per-family isolation; see `features.md` for why
-  that's deliberately out of scope for now). Sign up at `login.html`.
+  on every request.
+- **Households:** one deployment serves several households, each seeing only
+  its own items, history, locations and tags. Everyone in a household sees and
+  edits the same data. See "Households, signup and the admin account" below.
 
 ## Data model
 
@@ -133,13 +134,13 @@ it at that platform's persistent volume for `DB_PATH` instead of a local bind mo
 ### Backing up before pulling an update
 
 Worth doing before any `git pull` + `docker compose up --build`, since new
-code sometimes adds tables/columns to the database on startup. None of the
-migrations so far delete or rewrite existing data (only `CREATE TABLE IF NOT
-EXISTS` / `ALTER TABLE ADD COLUMN`), but backing up first costs nothing and
-means a bad upgrade is always recoverable. `./restart.sh` does this
-automatically (stop, copy `data/` into `data-backups/<timestamp>`, keep the
-last 10, start again — pass `--build` to also rebuild the image after a
-`git pull`):
+code can change the database schema on startup (see "Schema versions and
+migrations" below). Backing up first costs nothing and means a bad upgrade
+is always recoverable. `./restart.sh` does this automatically (stop, copy
+`data/` into `data-backups/<timestamp>`, keep the last 20, start again —
+pass `--build` to also rebuild the image after a `git pull`). Each backup
+gets a `SCHEMA_VERSION` file holding the database's schema version at the
+time (`unversioned` for a database from before versioning existed):
 
 ```bash
 ./restart.sh          # backup + restart, no rebuild
@@ -160,6 +161,99 @@ so a copy taken while the app is running could miss very recent writes that
 are still sitting in `inventory.db-wal` rather than the main file — copying
 the whole (stopped) `data` folder avoids that. To restore, stop the
 container, swap `data` for the backed-up folder, and start it again.
+
+### Schema versions and migrations
+
+Schema changes are numbered migrations in `server/src/migrations/`. The
+database records the ones it has had in a `schema_migrations` table
+(`version`, `name`, `applied_at`). At startup the server applies any it
+hasn't had yet, in order, each in its own transaction: a migration that fails
+partway rolls back completely, leaving the database at the previous version.
+The startup log says which version the database is at:
+
+```bash
+docker compose logs backoffridge | grep -i "schema"
+```
+
+Migration 001 is the schema as it was before versioning existed, so an
+existing database just gets recorded as version 1 with nothing changed.
+
+If the database is at a *newer* version than the code knows (e.g. after
+rolling the code back), the server refuses to start and says so in the logs,
+rather than run old code against a schema it doesn't understand. Deploy the
+newer code again, or restore a backup whose `SCHEMA_VERSION` the code knows.
+
+**Dry run before a schema upgrade.** `server/scripts/migrate-check.js`
+applies the pending migrations to a *copy* of a database and reports what
+changed: version before and after, row counts per table (and per household,
+once households exist), whether every existing row came through unchanged,
+and an integrity check. The file you point it at is never written to. To
+check new code against your real data before restarting onto it:
+
+```bash
+cd ~/apps/BackOfFridge
+git pull                      # the new code; the running container is unaffected
+docker compose build          # build the new image without restarting
+ls data-backups/              # pick the newest backup restart.sh made
+docker compose run --rm --no-deps \
+  -v "$PWD/data-backups:/backups:ro" \
+  backoffridge node scripts/migrate-check.js /backups/<timestamp>/inventory.db
+```
+
+It ends with `RESULT: OK` (exit code 0) or `RESULT: PROBLEMS FOUND`. Add
+`--keep` to keep the migrated copy for a closer look (it's inside the
+throwaway container, so only useful when running outside Docker). If it
+looks right, restart onto the new code with `./restart.sh --build` (`--build`
+is needed because the pull already happened, so `restart.sh` would otherwise
+see no new commits and skip the rebuild).
+
+Without Docker, from `server/`: `node scripts/migrate-check.js <path/to/inventory.db>`.
+`npm test` (in `server/`) runs the migration tests.
+
+### Households, signup and the admin account
+
+Each person belongs to one household. Signing up (at `login.html`) works
+three ways, depending on the code entered:
+
+- **A household's invite code** joins that household. Members find it on
+  their Settings page, and can make a new one there (the old one stops
+  working; nobody is removed). Settings is also where members rename their
+  household.
+- **A new-household code** starts a new household: the person names it and
+  becomes its first member. Only the admin can issue these, and each works
+  once.
+- **No code** creates a *pending* account. It can log in but sees only a
+  "waiting for approval" page until the admin approves it into a household
+  (or rejects it). The admin page shows how many are waiting; each signup
+  also writes a `SIGNUP PENDING` line to the log.
+
+**The admin** issues new-household codes, handles pending accounts, and
+moves or removes household members, on `admin.html`. Households are only
+ever created by someone signing up with a new-household code (they name
+it) or by the admin approving a pending account into a new one. Moving or
+removing a member replaces the invite code of the household they left, so
+the old code can't be used to get back in; a removed member goes back to
+waiting for approval. `users.html` (linked from the admin page as "All
+users") lists every account with its household, or none, and its status.
+From there the admin can move, remove or add someone to a household, or
+**Block** them: a blocked account can't log in, and leaves its household.
+Blocked accounts stay listed, and **Unblock** puts them back to waiting for
+approval. Admin accounts can only be changed from the command line. It's a separate, dedicated login with no household of its
+own, so it can't see anyone's items. It can only be created from the
+server's command line; there's no web route that grants admin:
+
+```bash
+docker compose exec backoffridge node scripts/admin.js create <username>
+```
+
+That prints a generated password once. Other commands: `grant <username>`
+(make an existing login an admin; it keeps its household),
+`revoke <username>`, `reset-password <username>` (any login, e.g. someone who
+forgot theirs; it also logs them out everywhere), and `list` (admins and
+pending accounts).
+
+Data from before households existed was moved into household #1, "Household
+1"; any member can rename it from Settings.
 
 ### Reaching it from your phone / Supernote away from home
 
@@ -229,7 +323,8 @@ the stable setup below.
 ## Logging
 
 Every API request logs an `ACCESS` (or `ACCESS DENIED` for a bad/missing key)
-line with the method, path, and requester IP, and purchases additionally log a
+line with the method, path, requester IP, and who made it, with their
+household (`as alice (household 1)`), and purchases additionally log a
 friendlier `PURCHASED "name" x<qty> <unit> -> <location>` line. Each line is
 written both to stdout and to a local file, `<DB volume>/app.log` (so under
 Docker that's inside your `./data` bind mount, right next to `inventory.db` —
@@ -242,14 +337,20 @@ To watch it live: `docker compose logs -f` (handy to leave running in a
 ## API (for future automation, e.g. a voice-logging skill)
 
 Every route below except the `/api/auth/*` ones requires a valid session
-cookie (i.e. you're logged in as a real user — see "Auth" above).
+cookie (i.e. you're logged in as a real user — see "Auth" above). Item,
+location, tag, stats and household routes act on the logged-in user's own
+household; it comes from the session, never from the request. They return
+403 for a pending account (`reason: "pending"`) and for the admin account
+(`reason: "admin"`), and 404 for another household's item ids, exactly as
+for ids that don't exist.
 
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/api/auth/signup` | Create an account. Body `{ username, password }` (password 6+ chars). Logs you in. |
+| POST | `/api/auth/signup` | Create an account. Body `{ username, password, code?, householdName? }` (password 6+ chars). With a household invite code: joins it. With a new-household code: creates a household named `householdName`. No code: a pending account. Logs you in. |
+| POST | `/api/auth/check-code` | What an invite code does. Body `{ code }`. `{ type: "join", householdName }` or `{ type: "new_household" }`; 404 if not recognised |
 | POST | `/api/auth/login` | Log in. Body `{ username, password }` |
 | POST | `/api/auth/logout` | Log out (clears the session) |
-| GET | `/api/auth/me` | Currently logged-in username, or 401 if not logged in |
+| GET | `/api/auth/me` | Currently logged-in user: `{ username, status, isAdmin, household }`, or 401 if not logged in |
 | GET | `/api/items` | List items. Filters: `status`, `location`, `category`, `expiring_within_days` |
 | GET | `/api/items/:id` | Get one item |
 | POST | `/api/items` | Log a purchase (`name` required; `category`, `location`, `quantity`, `unit`, `purchase_date`, `expiration_date`, `notes` optional) |
@@ -263,7 +364,12 @@ cookie (i.e. you're logged in as a real user — see "Auth" above).
 | GET | `/api/locations/detail` | Locations with a count of items currently referencing each, for the manage-locations page |
 | POST | `/api/locations` | Add a new location. Body `{ name }` |
 | DELETE | `/api/locations/:name` | Remove a location — fails with a 400 if any item still references it |
+| GET | `/api/tags`, `/api/tags/detail`; POST `/api/tags`; DELETE `/api/tags/:name` | Same as the location routes, for tags |
 | GET | `/api/stats` | Counts: active / expiring soon (≤3 days) / expired |
+| GET | `/api/household` | Your household: `{ name, inviteCode, members }` |
+| POST | `/api/household/invite-code` | Replace your household's invite code |
+| PATCH | `/api/household` | Rename your household. Body `{ name }` |
+| | `/api/admin/*` | Admin only (households, new-household codes, pending approvals); see `server/src/routes/admin.js` |
 
 This API is intentionally the integration point for the voice-logging idea: a Claude
 Code skill or connector can call these same endpoints once you decide how you want to

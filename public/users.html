@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<script>
+// See index.html for why this runs inline, before the stylesheet.
+(function () {
+  try {
+    var t = localStorage.getItem('theme');
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+  } catch (e) {}
+})();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BackOfFridge - Users</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>Users</h1>
+    <a href="admin.html">&larr; Admin</a>
+    <span id="whoami" class="stats"></span>
+    <button id="logoutBtn" class="small">Log out</button>
+  </header>
+
+  <main id="app">
+    <section class="settings-section">
+      <p class="settings-desc" id="userSummary"></p>
+      <p class="settings-desc">
+        <strong>Remove</strong> takes someone out of their household; they go back to waiting for approval.
+        <strong>Block</strong> stops them logging in at all. Blocked accounts stay listed here, and
+        <strong>Unblock</strong> puts them back to waiting for approval. Taking someone out of a household
+        replaces that household's invite code, so they can't use it to rejoin; nobody else is affected.
+      </p>
+      <div id="usersList"></div>
+    </section>
+  </main>
+
+  <script src="users.js"></script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<script>
+// See index.html for why this runs inline, before the stylesheet.
+(function () {
+  try {
+    var t = localStorage.getItem('theme');
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+  } catch (e) {}
+})();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BackOfFridge - Waiting for approval</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>BackOfFridge</h1>
+    <button id="logoutBtn" class="small">Log out</button>
+  </header>
+
+  <div class="key-gate">
+    <p><strong>Thanks for signing up<span id="pendingName"></span>.</strong></p>
+    <p class="settings-desc">Your account is waiting for the admin to approve it and add you to a household. There's nothing to see until then.</p>
+    <button id="checkBtn">Check again</button>
+    <p id="pendingStatus" class="settings-desc"></p>
+  </div>
+
+  <script src="pending.js"></script>
+</body>
+</html>

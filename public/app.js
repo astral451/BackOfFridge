@@ -3,6 +3,21 @@
     window.location.href = 'login.html?next=' + encodeURIComponent(window.location.pathname.split('/').pop());
   }
 
+  // Pages here show household data. A pending account goes to the waiting
+  // page instead, and the admin account (no household) to the admin page.
+  // Takes either /api/auth/me's user or a 403 body's { reason }.
+  function redirectIfNoHousehold(info) {
+    if (info.status === 'pending' || info.reason === 'pending') {
+      window.location.href = 'pending.html';
+      return true;
+    }
+    if ((info.isAdmin && !info.household) || info.reason === 'admin') {
+      window.location.href = 'admin.html';
+      return true;
+    }
+    return false;
+  }
+
   function apiFetch(path, opts) {
     opts = opts || {};
     opts.headers = Object.assign({}, opts.headers, { 'Content-Type': 'application/json' });
@@ -13,6 +28,8 @@
       }
       if (!res.ok) {
         return res.json().then(function (body) {
+          // Leaving the page: settle nothing, so no error alert flashes first.
+          if (res.status === 403 && redirectIfNoHousehold(body)) return new Promise(function () {});
           throw new Error(body.error || 'request failed');
         });
       }
@@ -29,7 +46,8 @@
       }
       return res.json();
     }).then(function (me) {
-      if (me) document.getElementById('whoami').textContent = 'Signed in as ' + me.username;
+      if (!me || redirectIfNoHousehold(me)) return;
+      document.getElementById('whoami').textContent = 'Signed in as ' + me.username;
     });
   }
 
@@ -136,6 +154,8 @@
     'carton', 'cartons', 'stick', 'sticks', 'piece', 'pieces', 'count', 'ct', 'each',
   ];
   var FUZZY_THRESHOLD = 0.72;
+  // Words dropped right before a matched location (after an optional "the").
+  var LOCATION_LEAD_INS = ['in', 'on', 'at', 'into', 'inside', 'under'];
 
   function joinSplitTeens(text) {
     return text.replace(/\b(two|three|four|five|six|seven|eight|nine)\s+teen\b/gi, function (m, word) {
@@ -408,8 +428,9 @@
   // managed list (locations/tags), anywhere in the line - not just at the
   // end, so "kitchen fridge yogurt" works as well as "yogurt kitchen
   // fridge". A run never crosses a comma or starts on a number. Marks the
-  // matched tokens used and returns the list entry, or ''.
-  function takeListMatch(tokens, used, list, maxWords) {
+  // matched tokens used and returns the list entry, or ''. leadIns, if
+  // given, are words dropped from just before the match ("in the freezer").
+  function takeListMatch(tokens, used, list, maxWords, leadIns) {
     var best = null;
     for (var w = maxWords; w >= 1; w--) {
       for (var start = tokens.length - w; start >= 0; start--) {
@@ -437,6 +458,18 @@
     if (prev >= 0 && !used[prev] && tokens[prev].length >= 2 &&
         best.entry.toLowerCase().indexOf(tokens[prev].toLowerCase()) === 0) {
       used[prev] = true;
+      prev--;
+    }
+    // Spoken lead-in: "in the freezer", "on the shelf" - otherwise "in the"
+    // is left behind in the notes.
+    if (leadIns) {
+      if (prev >= 0 && !used[prev] && tokens[prev].toLowerCase() === 'the') {
+        used[prev] = true;
+        prev--;
+      }
+      if (prev >= 0 && !used[prev] && leadIns.indexOf(tokens[prev].toLowerCase()) !== -1) {
+        used[prev] = true;
+      }
     }
     return best.entry;
   }
@@ -483,7 +516,7 @@
     var tokens = text.replace(/,/g, ' , ').split(/\s+/).filter(Boolean);
     var used = tokens.map(function () { return false; });
 
-    result.location = takeListMatch(tokens, used, locations, 3);
+    result.location = takeListMatch(tokens, used, locations, 3, LOCATION_LEAD_INS);
     result.tag = takeListMatch(tokens, used, tags, 2);
 
     // The first number in what's left is the quantity (or, with "quantity"

@@ -115,6 +115,10 @@ a { color: var(--accent); }
 }
 .key-gate a { font-size: 0.85rem; }
 .auth-error { color: var(--danger-text); font-size: 0.85rem; font-weight: 600; }
+.code-info { font-size: 0.8rem; color: var(--muted); margin: 0 0 0.5rem; text-align: left; }
+.code-info.auth-error { color: var(--danger-text); }
+#signup-code { text-transform: uppercase; letter-spacing: 0.05em; }
+#signup-code::placeholder { text-transform: none; letter-spacing: normal; }
 
 header {
   display: flex;
@@ -562,6 +566,21 @@ body:has(.bottombar) { padding-bottom: 84px; } /* room for the fixed bottom bar 
 }
 .settings-section h2 { font-size: 0.95rem; margin: 0 0 4px; }
 .settings-desc { font-size: 0.8rem; color: var(--muted); margin: 0 0 10px; }
+.settings-desc:last-child { margin-bottom: 0; }
+.household-title { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; }
+.household-title h2 { margin: 0; }
+#renameForm { margin-bottom: 10px; }
+#renameForm input { min-width: 0; }
+#renameForm button.small {
+  background: var(--surface); color: var(--text); border: 1px solid var(--border);
+  padding: 0 10px; font-weight: 600;
+}
+.invite-code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 1.5rem; font-weight: 700; letter-spacing: 0.08em;
+  margin: 4px 0 10px; user-select: all;
+}
+.settings-section .invite-code + button.small { margin-bottom: 6px; }
 
 /* ---------- iPad+/desktop: add-item panel sits beside the list, not below it ---------- */
 @media (min-width: 720px) {
@@ -593,3 +612,23 @@ body:has(.bottombar) { padding-bottom: 84px; } /* room for the fixed bottom bar 
   .add-shell.with-panel .sheet #moreFields { display: grid !important; }
   body:has(.bottombar) { padding-bottom: 32px; }
 }
+
+/* ---------- Admin page ---------- */
+.admin-row { flex-wrap: wrap; gap: 8px; }
+.admin-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.admin-controls select,
+.admin-controls input {
+  font: inherit; font-size: 16px; padding: 6px 8px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--bg); color: var(--text);
+}
+.code-text { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-weight: 700; letter-spacing: 0.06em; }
+.manage-row.used { opacity: 0.6; }
+.manage-row + .member-row { margin-top: 4px; }
+.member-row {
+  margin-left: 18px; padding: 6px 10px; font-size: 0.84rem;
+  flex-direction: column; align-items: flex-start; gap: 6px;
+}
+.member-row .admin-controls { flex-wrap: nowrap; }
+.member-row select { max-width: 150px; padding: 4px 6px; }
+.user-row { flex-direction: column; align-items: flex-start; gap: 6px; }
+.user-row .admin-controls select { max-width: 150px; padding: 4px 6px; }

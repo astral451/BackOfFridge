@@ -81,7 +81,7 @@ either by a keyword or by being unambiguous on its own.
 | Field      | Needs a keyword? | Rule |
 |------------|------------------|------|
 | Name       | No  | The words before the quantity, commas or not. Dictation drops commas inside product names, so a comma never ends the name. Say it first. |
-| Location   | No  | Matched (fuzzily) against the managed location list, anywhere in the line. |
+| Location   | No  | Matched (fuzzily) against the managed location list, anywhere in the line. "in the", "on the", "at" etc. directly before it are dropped with it. |
 | Tag        | No  | Matched against the managed tag list, anywhere in the line. |
 | Expires    | Only for partial dates | A full date ("May 16, 2027", "05/16/2027") is taken as the expiration on its own. Purchase date defaults to today, so a bare date means expiration. A duration works without "expires" if it has "in" before it or "from today" after it: "in two weeks", "one month from today", "a month from today". A bare "2 weeks" with neither is left alone, because it could be a quantity. A date without a year ("expires May 16") or space-separated numbers ("expires 10 15 2026") still need "expires". "exp", "expiration", "best by" and "use by" also work. |
 | Quantity + size | **Yes, when both are spoken** | "quantity two **size** 24 ounces". "**volume**" and "**weight**" work the same as "size". A comma (typed, or said as "comma") between the two numbers also works: "two, 24 ounces". |
@@ -126,3 +126,45 @@ said. Each works anywhere in the line, stray commas included:
 
 "In two weeks in," has a trailing "in" from dictation, which is dropped
 along with the duration.
+
+## Examples from other households
+
+### 7. Second household's first dictation (2026-10-23)
+
+    bird eye frozen skillet meals, three bags, in the freezer
+
+The first real dictation from the second household, and their first try
+at it. They reported that pressing add put the name in the name box, 3 in
+the quantity box, and picked Freezer as the location, which is what they
+wanted. Assumes a managed location named "Freezer".
+
+| Field      | Expected | Parser today |
+|------------|----------|--------------|
+| Name       | bird eye frozen skillet meals | same, unless the household has a tag called "Frozen" (see below) |
+| Quantity   | 3 | 3 |
+| Unit/size  | bags | bags |
+| Location   | Freezer | Freezer |
+| Notes      | (empty) | (empty), fixed 2026-10-23; was **"in the"** |
+
+Worth knowing:
+
+- **It shows how a new person talks to the box without being told the
+  rules:** the name first, the count as a word with a unit, and the location
+  as a phrase ("in the freezer"). There's no keyword or expiration, and the
+  commas fall between the fields.
+- **"in the" used to end up in Notes.** The location match took "freezer"
+  but left the words before it behind as leftovers. The Notes field is
+  behind "More fields" on a phone, so they wouldn't have seen it. Fixed:
+  "the" and a lead-in word ("in", "on", "at", "into", "inside", "under")
+  right before a matched location are now dropped along with it. "in the
+  kitchen fridge", "on the garage shelf" and "at kitchen fridge" all work
+  the same way. Words inside the name are kept: "pigs in a blanket" still
+  keeps its "in", because the dropped words have to come directly before
+  the location.
+- **A word in the name that matches a tag is taken out of the name.** If
+  the household has a tag "Frozen", the result is name "bird eye skillet
+  meals" with tag Frozen. That's reasonable when the word is just a
+  category, but "frozen" is part of this product's name. Their tag list
+  isn't known, so this hasn't been confirmed for them.
+- "bird eye" is presumably the brand Birds Eye, misheard by dictation.
+  There's nothing for the parser to do about that.

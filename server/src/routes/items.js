@@ -1,5 +1,6 @@
 const express = require('express');
-const db = require('../db');
+const store = require('../store');
+const { requirePermission } = require('../permissions');
 const { log } = require('../logger');
 
 const router = express.Router();
@@ -27,50 +28,24 @@ function serialize(row) {
 // GET /api/items?status=active&location=fridge&tag=dairy&expiring_within_days=3
 router.get('/', (req, res) => {
   const { status, location, category, tag, expiring_within_days } = req.query;
-  const clauses = [];
-  const params = {};
-
-  if (status) {
-    clauses.push('status = @status');
-    params.status = status;
-  }
-  if (location) {
-    clauses.push('location = @location COLLATE NOCASE');
-    params.location = location;
-  }
-  if (category) {
-    clauses.push('category = @category');
-    params.category = category;
-  }
-  if (tag) {
-    clauses.push('tag = @tag COLLATE NOCASE');
-    params.tag = tag;
-  }
-  if (expiring_within_days !== undefined) {
-    clauses.push("expiration_date IS NOT NULL AND date(expiration_date) <= date('now', @days)");
-    params.days = `+${parseInt(expiring_within_days, 10) || 0} days`;
-  }
-
-  const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
-  const rows = db.prepare(`SELECT * FROM items ${where} ORDER BY expiration_date IS NULL, expiration_date ASC, created_at DESC`).all(params);
+  const rows = store.listItems(req.householdId, {
+    status, location, category, tag, expiringWithinDays: expiring_within_days,
+  });
   res.json(rows.map(serialize));
 });
 
 router.get('/:id', (req, res) => {
-  const row = db.prepare('SELECT * FROM items WHERE id = ?').get(req.params.id);
+  const row = store.getItem(req.householdId, req.params.id);
   if (!row) return res.status(404).json({ error: 'not found' });
   res.json(serialize(row));
 });
 
 // GET /api/items/:id/history - this item's recorded events, newest first
 router.get('/:id/history', (req, res) => {
-  const existing = db.prepare('SELECT * FROM items WHERE id = ?').get(req.params.id);
+  const existing = store.getItem(req.householdId, req.params.id);
   if (!existing) return res.status(404).json({ error: 'not found' });
 
-  const rows = db.prepare(`
-    SELECT event_type, detail, username, created_at FROM item_events
-    WHERE item_id = ? ORDER BY created_at DESC, id DESC
-  `).all(req.params.id);
+  const rows = store.itemHistory(req.householdId, existing.id);
   res.json(rows.map((r) => ({ ...r, detail: r.detail ? JSON.parse(r.detail) : null })));
 });
 
@@ -89,7 +64,7 @@ function trimTextFields(obj) {
   return obj;
 }
 
-router.post('/', (req, res) => {
+router.post('/', requirePermission('items:write'), (req, res) => {
   const {
     name,
     category = 'perishable',
@@ -118,21 +93,19 @@ router.post('/', (req, res) => {
     return res.status(400).json({ error: 'fill_percent must be between 0 and 100' });
   }
 
-  const result = db.prepare(`
-    INSERT INTO items (name, category, location, tag, quantity, unit, purchase_date, expiration_date, notes, tracking_mode, fill_percent, low_stock_threshold)
-    VALUES (@name, @category, @location, @tag, @quantity, @unit, @purchase_date, @expiration_date, @notes, @tracking_mode, @fill_percent, @low_stock_threshold)
-  `).run({ name, category, location, tag, quantity, unit, purchase_date, expiration_date, notes, tracking_mode, fill_percent, low_stock_threshold });
-  db.ensureLocation(location);
-  db.ensureTag(tag);
+  const row = store.insertItem(req.householdId, {
+    name, category, location, tag, quantity, unit, purchase_date, expiration_date, notes, tracking_mode, fill_percent, low_stock_threshold,
+  });
+  store.ensureName(req.householdId, 'locations', location);
+  store.ensureName(req.householdId, 'tags', tag);
 
-  const row = db.prepare('SELECT * FROM items WHERE id = ?').get(result.lastInsertRowid);
-  db.recordEvent(row.id, row.name, 'purchased', { quantity: row.quantity, unit: row.unit, location: row.location }, req.username);
+  store.recordEvent(req.householdId, row.id, row.name, 'purchased', { quantity: row.quantity, unit: row.unit, location: row.location }, req.username);
   log(`PURCHASED "${row.name}" x${row.quantity}${row.unit ? ' ' + row.unit : ''} -> ${row.location || 'unspecified location'} by ${req.username}`);
   res.status(201).json(serialize(row));
 });
 
-router.patch('/:id', (req, res) => {
-  const existing = db.prepare('SELECT * FROM items WHERE id = ?').get(req.params.id);
+router.patch('/:id', requirePermission('items:write'), (req, res) => {
+  const existing = store.getItem(req.householdId, req.params.id);
   if (!existing) return res.status(404).json({ error: 'not found' });
 
   const fields = [
@@ -163,16 +136,9 @@ router.patch('/:id', (req, res) => {
     return res.status(400).json({ error: 'quantity must be a number, 0 or more' });
   }
 
-  const merged = { ...existing, ...updates };
-  db.prepare(`
-    UPDATE items SET name=@name, category=@category, location=@location, tag=@tag, quantity=@quantity,
-      unit=@unit, purchase_date=@purchase_date, expiration_date=@expiration_date,
-      status=@status, notes=@notes, tracking_mode=@tracking_mode, fill_percent=@fill_percent,
-      low_stock_threshold=@low_stock_threshold, updated_at=datetime('now')
-    WHERE id=@id
-  `).run(merged);
-  if (updates.location) db.ensureLocation(updates.location);
-  if (updates.tag) db.ensureTag(updates.tag);
+  const row = store.updateItem(req.householdId, { ...existing, ...updates });
+  if (updates.location) store.ensureName(req.householdId, 'locations', updates.location);
+  if (updates.tag) store.ensureName(req.householdId, 'tags', updates.tag);
 
   const changedFields = Object.keys(updates);
   const onlyFillPercentChanged = changedFields.length === 1 && updates.fill_percent !== undefined;
@@ -187,32 +153,31 @@ router.patch('/:id', (req, res) => {
   const onlyDatesChanged = changedFields.length > 0 && changedFields.every((f) => dateFields.includes(f));
 
   if (recountField) {
-    db.recordEvent(existing.id, existing.name, 'recount', {
+    store.recordEvent(req.householdId, existing.id, existing.name, 'recount', {
       field: recountField,
       from: existing[recountField],
       to: updates[recountField],
       unit: recountField === 'fill_percent' ? '%' : existing.unit,
     }, req.username);
   } else if (onlyFillPercentChanged) {
-    db.recordEvent(existing.id, existing.name, 'fill_level_set', { from: existing.fill_percent, to: updates.fill_percent }, req.username);
+    store.recordEvent(req.householdId, existing.id, existing.name, 'fill_level_set', { from: existing.fill_percent, to: updates.fill_percent }, req.username);
   } else if (onlyDatesChanged) {
     // A date correction (e.g. fixing a wrong expiration) isn't a
     // consumption-pattern signal, so it's deliberately left out of
     // item_events - just noted in the plain text log.
     log(`DATES EDITED "${existing.name}" by ${req.username}: ` + changedFields.map((f) => `${f} ${existing[f] || '(none)'} -> ${updates[f] || '(none)'}`).join(', '));
   } else {
-    db.recordEvent(existing.id, existing.name, 'edited', updates, req.username);
+    store.recordEvent(req.householdId, existing.id, existing.name, 'edited', updates, req.username);
   }
 
-  const row = db.prepare('SELECT * FROM items WHERE id = ?').get(req.params.id);
   res.json(serialize(row));
 });
 
 // Reduce an active item's quantity by `amount` (or all of it if omitted/>=
 // remaining), setting `status` once none is left. Remembers the prior
 // status/quantity so a single /undo can reverse this call.
-function reduceQuantity(id, status, amount, username, extra) {
-  const existing = db.prepare('SELECT * FROM items WHERE id = ?').get(id);
+function reduceQuantity(householdId, id, status, amount, username, extra) {
+  const existing = store.getItem(householdId, id);
   if (!existing) return null;
 
   const removed = amount === undefined || amount === null || amount >= existing.quantity
@@ -220,80 +185,58 @@ function reduceQuantity(id, status, amount, username, extra) {
     : amount;
   const remaining = existing.quantity - removed;
 
-  db.prepare(`
-    UPDATE items SET
-      quantity = @quantity,
-      status = @status,
-      prev_status = @prev_status,
-      prev_quantity = @prev_quantity,
-      thrown_out_date = @thrown_out_date,
-      updated_at = datetime('now')
-    WHERE id = @id
-  `).run({
-    id,
+  const row = store.updateItemQuantity(householdId, existing.id, {
     quantity: remaining,
     status: remaining > 0 ? 'active' : status,
-    prev_status: existing.status,
-    prev_quantity: existing.quantity,
-    thrown_out_date: remaining > 0 ? existing.thrown_out_date : (extra && extra.thrown_out_date) || null,
+    prevStatus: existing.status,
+    prevQuantity: existing.quantity,
+    thrownOutDate: remaining > 0 ? existing.thrown_out_date : (extra && extra.thrown_out_date) || null,
   });
-  db.recordEvent(existing.id, existing.name, status, { quantity: removed, unit: existing.unit }, username);
-
-  return db.prepare('SELECT * FROM items WHERE id = ?').get(id);
+  store.recordEvent(householdId, existing.id, existing.name, status, { quantity: removed, unit: existing.unit }, username);
+  return row;
 }
 
 // POST /api/items/:id/throw-out - log that some or all of an item was thrown out.
 // Body: { quantity? } - amount to remove; omit to throw out everything remaining.
-router.post('/:id/throw-out', (req, res) => {
+router.post('/:id/throw-out', requirePermission('items:write'), (req, res) => {
   if (req.body.quantity !== undefined && !(req.body.quantity > 0)) {
     return res.status(400).json({ error: 'quantity must be a positive number' });
   }
   const thrown_out_date = req.body.thrown_out_date || new Date().toISOString().slice(0, 10);
-  const row = reduceQuantity(req.params.id, 'thrown_out', req.body.quantity, req.username, { thrown_out_date });
+  const row = reduceQuantity(req.householdId, req.params.id, 'thrown_out', req.body.quantity, req.username, { thrown_out_date });
   if (!row) return res.status(404).json({ error: 'not found' });
   res.json(serialize(row));
 });
 
 // POST /api/items/:id/consume - log that some or all of an item was used up.
 // Body: { quantity? } - amount to remove; omit to consume everything remaining.
-router.post('/:id/consume', (req, res) => {
+router.post('/:id/consume', requirePermission('items:write'), (req, res) => {
   if (req.body.quantity !== undefined && !(req.body.quantity > 0)) {
     return res.status(400).json({ error: 'quantity must be a positive number' });
   }
-  const row = reduceQuantity(req.params.id, 'consumed', req.body.quantity, req.username);
+  const row = reduceQuantity(req.householdId, req.params.id, 'consumed', req.body.quantity, req.username);
   if (!row) return res.status(404).json({ error: 'not found' });
   res.json(serialize(row));
 });
 
 // POST /api/items/:id/undo - reverse the last consume/throw-out call on this item
-router.post('/:id/undo', (req, res) => {
-  const existing = db.prepare('SELECT * FROM items WHERE id = ?').get(req.params.id);
+router.post('/:id/undo', requirePermission('items:write'), (req, res) => {
+  const existing = store.getItem(req.householdId, req.params.id);
   if (!existing) return res.status(404).json({ error: 'not found' });
   if (existing.prev_status === null) {
     return res.status(400).json({ error: 'nothing to undo' });
   }
 
-  db.prepare(`
-    UPDATE items SET
-      status = @prev_status,
-      quantity = @prev_quantity,
-      prev_status = NULL,
-      prev_quantity = NULL,
-      thrown_out_date = CASE WHEN @prev_status = 'thrown_out' THEN thrown_out_date ELSE NULL END,
-      updated_at = datetime('now')
-    WHERE id = @id
-  `).run({ id: req.params.id, prev_status: existing.prev_status, prev_quantity: existing.prev_quantity });
-  db.recordEvent(existing.id, existing.name, 'undo', { restored_status: existing.prev_status, restored_quantity: existing.prev_quantity }, req.username);
-
-  const row = db.prepare('SELECT * FROM items WHERE id = ?').get(req.params.id);
+  const row = store.undoItem(req.householdId, existing);
+  store.recordEvent(req.householdId, existing.id, existing.name, 'undo', { restored_status: existing.prev_status, restored_quantity: existing.prev_quantity }, req.username);
   res.json(serialize(row));
 });
 
-router.delete('/:id', (req, res) => {
-  const existing = db.prepare('SELECT * FROM items WHERE id = ?').get(req.params.id);
+router.delete('/:id', requirePermission('items:write'), (req, res) => {
+  const existing = store.getItem(req.householdId, req.params.id);
   if (!existing) return res.status(404).json({ error: 'not found' });
-  db.prepare('DELETE FROM items WHERE id = ?').run(req.params.id);
-  db.recordEvent(existing.id, existing.name, 'deleted', null, req.username);
+  store.deleteItem(req.householdId, existing.id);
+  store.recordEvent(req.householdId, existing.id, existing.name, 'deleted', null, req.username);
   res.status(204).end();
 });
 
