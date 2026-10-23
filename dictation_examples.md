@@ -126,3 +126,41 @@ said. Each works anywhere in the line, stray commas included:
 
 "In two weeks in," has a trailing "in" from dictation, which is dropped
 along with the duration.
+
+## Examples from other households
+
+### 7. Second household's first dictation (2026-10-23)
+
+    bird eye frozen skillet meals, three bags, in the freezer
+
+The first real dictation from the second household, and their first try
+at it. They reported that pressing add put the name in the name box, 3 in
+the quantity box, and picked Freezer as the location, which is what they
+wanted. Assumes a managed location named "Freezer".
+
+| Field      | Expected | Parser today |
+|------------|----------|--------------|
+| Name       | bird eye frozen skillet meals | same, unless the household has a tag called "Frozen" (see below) |
+| Quantity   | 3 | 3 |
+| Unit/size  | bags | bags |
+| Location   | Freezer | Freezer |
+| Notes      | (empty) | **"in the"** |
+
+Worth knowing:
+
+- **It shows how a new person talks to the box without being told the
+  rules:** the name first, the count as a word with a unit, and the location
+  as a phrase ("in the freezer"). There's no keyword or expiration, and the
+  commas fall between the fields.
+- **"in the" ends up in Notes.** The location match takes "freezer" but
+  leaves the words before it behind as leftovers. The Notes field is behind
+  "More fields" on a phone, so they wouldn't have seen it. Filler like
+  "in", "in the" and "on the" right before a matched location should be
+  dropped along with it.
+- **A word in the name that matches a tag is taken out of the name.** If
+  the household has a tag "Frozen", the result is name "bird eye skillet
+  meals" with tag Frozen. That's reasonable when the word is just a
+  category, but "frozen" is part of this product's name. Their tag list
+  isn't known, so this hasn't been confirmed for them.
+- "bird eye" is presumably the brand Birds Eye, misheard by dictation.
+  There's nothing for the parser to do about that.

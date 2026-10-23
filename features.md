@@ -353,6 +353,10 @@
     household.
   - **Logs** name the household on every `ACCESS` line, and signups,
     approvals, rejections and code changes each get their own line.
+  - **In use:** stable in production on the `multi-household` branch. As of
+    2026-10-23 a second household (another client, not the original user's)
+    is live, with items in several locations. Its first quick-add dictation
+    worked first time (`dictation_examples.md` example 7).
   - **Tests** (`npm test`): `test/isolation.test.js` runs the real API with
     two households sharing location/tag names and checks every household
     endpoint and every `:id` route (404, item unchanged), client-sent
@@ -495,7 +499,10 @@ priority — a Low item isn't necessarily more worth doing than a High one.
   (see Shipped); still to do:
   - `common_sql_commands.sh`: an optional household filter (e.g. a
     `HOUSEHOLD` env var) on every command, so `by-name`/`catch-up` don't
-    silently mix households once there's more than one.
+    silently mix households. **This is needed now.** As of 2026-10-23 a
+    second household is in real use on the `multi-household` branch, with
+    items in several locations, so every command already mixes the two
+    households' data.
   - Finer permissions, if ever wanted: `users.household_role` and
     `can()` in `server/src/permissions.js` are the hooks.
   - Possibly: rate-limiting signup/login and code checks (codes are 8
