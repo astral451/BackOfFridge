@@ -154,6 +154,8 @@
     'carton', 'cartons', 'stick', 'sticks', 'piece', 'pieces', 'count', 'ct', 'each',
   ];
   var FUZZY_THRESHOLD = 0.72;
+  // Words dropped right before a matched location (after an optional "the").
+  var LOCATION_LEAD_INS = ['in', 'on', 'at', 'into', 'inside', 'under'];
 
   function joinSplitTeens(text) {
     return text.replace(/\b(two|three|four|five|six|seven|eight|nine)\s+teen\b/gi, function (m, word) {
@@ -426,8 +428,9 @@
   // managed list (locations/tags), anywhere in the line - not just at the
   // end, so "kitchen fridge yogurt" works as well as "yogurt kitchen
   // fridge". A run never crosses a comma or starts on a number. Marks the
-  // matched tokens used and returns the list entry, or ''.
-  function takeListMatch(tokens, used, list, maxWords) {
+  // matched tokens used and returns the list entry, or ''. leadIns, if
+  // given, are words dropped from just before the match ("in the freezer").
+  function takeListMatch(tokens, used, list, maxWords, leadIns) {
     var best = null;
     for (var w = maxWords; w >= 1; w--) {
       for (var start = tokens.length - w; start >= 0; start--) {
@@ -455,6 +458,18 @@
     if (prev >= 0 && !used[prev] && tokens[prev].length >= 2 &&
         best.entry.toLowerCase().indexOf(tokens[prev].toLowerCase()) === 0) {
       used[prev] = true;
+      prev--;
+    }
+    // Spoken lead-in: "in the freezer", "on the shelf" - otherwise "in the"
+    // is left behind in the notes.
+    if (leadIns) {
+      if (prev >= 0 && !used[prev] && tokens[prev].toLowerCase() === 'the') {
+        used[prev] = true;
+        prev--;
+      }
+      if (prev >= 0 && !used[prev] && leadIns.indexOf(tokens[prev].toLowerCase()) !== -1) {
+        used[prev] = true;
+      }
     }
     return best.entry;
   }
@@ -501,7 +516,7 @@
     var tokens = text.replace(/,/g, ' , ').split(/\s+/).filter(Boolean);
     var used = tokens.map(function () { return false; });
 
-    result.location = takeListMatch(tokens, used, locations, 3);
+    result.location = takeListMatch(tokens, used, locations, 3, LOCATION_LEAD_INS);
     result.tag = takeListMatch(tokens, used, tags, 2);
 
     // The first number in what's left is the quantity (or, with "quantity"

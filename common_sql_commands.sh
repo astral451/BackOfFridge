@@ -13,6 +13,14 @@
 #   ./common_sql_commands.sh catch-up         # bursts of quick reductions
 #   ./common_sql_commands.sh items            # every item, and whether it's active
 #   ./common_sql_commands.sh by-name          # totals per product, across all its entries
+#   ./common_sql_commands.sh households       # every household, with its id
+#
+# HOUSEHOLD scopes every command to one household, by id or by name
+# (case-insensitive):
+#   HOUSEHOLD=2 ./common_sql_commands.sh by-name
+#   HOUSEHOLD="Household 1" ./common_sql_commands.sh catch-up
+# Without it, commands cover every household together, and a warning says
+# so whenever there's more than one.
 #
 # catch-up finds rapid runs of reductions on one item (several - taps a
 # few minutes apart) - almost always catching the app up on consumption
@@ -43,10 +51,24 @@ print_usage() {
   echo "  catch-up             Bursts of quick reductions (catch-up, not real-time use)"
   echo "  items                Every item A-Z and whether it's active"
   echo "  by-name              Totals per product name, across all its entries"
+  echo "  households           Every household with its id, members and items"
+  echo
+  echo "Set HOUSEHOLD=<id or name> to limit any command to one household."
 }
 
 query=""
+scoped=yes
 case "${1:-}" in
+  households)
+    scoped=no
+    query="
+SELECT h.id, h.name,
+  (SELECT COUNT(*) FROM users u WHERE u.household_id = h.id) AS members,
+  (SELECT COUNT(*) FROM items i WHERE i.household_id = h.id) AS items,
+  (SELECT COUNT(*) FROM items i WHERE i.household_id = h.id AND i.status = 'active') AS active
+FROM households h
+ORDER BY h.id;"
+    ;;
   purchased)
     query="SELECT item_name, COUNT(*) AS times FROM item_events WHERE event_type='purchased' GROUP BY item_name ORDER BY times DESC LIMIT 20;"
     ;;
@@ -232,4 +254,47 @@ if [ ! -f "$DB_PATH" ]; then
   exit 1
 fi
 
-sqlite3 -header -column "$DB_PATH" "$query"
+# Household scoping: temp views named items and item_events shadow the real
+# tables (SQLite looks in the temp schema first for an unqualified name), so
+# every query above sees only that household's rows without being rewritten.
+# They only last for this one sqlite3 run; nothing is written to the file.
+prefix=""
+if [ "$scoped" = yes ]; then
+  has_households=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='households';")
+  if [ -n "${HOUSEHOLD:-}" ]; then
+    if [ "$has_households" = 0 ]; then
+      echo "This database has no households yet, so HOUSEHOLD can't be used." >&2
+      exit 1
+    fi
+    case "$HOUSEHOLD" in
+      *[!0-9]*)
+        escaped=${HOUSEHOLD//\'/\'\'}
+        matches=$(sqlite3 "$DB_PATH" "SELECT id FROM households WHERE name = '$escaped' COLLATE NOCASE;")
+        ;;
+      *)
+        matches=$(sqlite3 "$DB_PATH" "SELECT id FROM households WHERE id = $HOUSEHOLD;")
+        ;;
+    esac
+    if [ -z "$matches" ]; then
+      echo "No household matches HOUSEHOLD=\"$HOUSEHOLD\". Run '$0 households' to list them." >&2
+      exit 1
+    fi
+    if [ "$(echo "$matches" | wc -l)" -gt 1 ]; then
+      echo "More than one household is named \"$HOUSEHOLD\"; use its id instead ('$0 households')." >&2
+      exit 1
+    fi
+    hid=$matches
+    hname=$(sqlite3 "$DB_PATH" "SELECT name FROM households WHERE id = $hid;")
+    echo "Household $hid: $hname" >&2
+    prefix="
+CREATE TEMP VIEW items AS SELECT * FROM main.items WHERE household_id = $hid;
+CREATE TEMP VIEW item_events AS SELECT * FROM main.item_events WHERE household_id = $hid;"
+  elif [ "$has_households" != 0 ]; then
+    count=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM households;")
+    if [ "$count" -gt 1 ]; then
+      echo "Note: showing all $count households mixed together. Set HOUSEHOLD=<id or name> for one ('$0 households' lists them)." >&2
+    fi
+  fi
+fi
+
+sqlite3 -header -column "$DB_PATH" "$prefix$query"

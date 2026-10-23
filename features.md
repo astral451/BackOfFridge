@@ -353,6 +353,16 @@
     household.
   - **Logs** name the household on every `ACCESS` line, and signups,
     approvals, rejections and code changes each get their own line.
+  - **`common_sql_commands.sh` household filter:** `HOUSEHOLD=<id or name>`
+    limits any command to one household, and a new `households` command
+    lists them with ids, members and item counts. The script scopes by
+    creating temporary `items`/`item_events` views for that one `sqlite3`
+    run, which hide the real tables, so none of the queries had to be
+    rewritten and nothing is written to the database. Without `HOUSEHOLD`
+    every household is covered together, as before, with a warning on
+    stderr whenever there's more than one. Built once the second household
+    went live (below), since `by-name` and `catch-up` were already mixing
+    the two households' data.
   - **In use:** stable in production on the `multi-household` branch. As of
     2026-10-23 a second household (another client, not the original user's)
     is live, with items in several locations. Its first quick-add dictation
@@ -497,12 +507,6 @@ priority — a Low item isn't necessarily more worth doing than a High one.
   one-tap button.
 - **Multi-household support — remaining pieces.** The core has shipped
   (see Shipped); still to do:
-  - `common_sql_commands.sh`: an optional household filter (e.g. a
-    `HOUSEHOLD` env var) on every command, so `by-name`/`catch-up` don't
-    silently mix households. **This is needed now.** As of 2026-10-23 a
-    second household is in real use on the `multi-household` branch, with
-    items in several locations, so every command already mixes the two
-    households' data.
   - Finer permissions, if ever wanted: `users.household_role` and
     `can()` in `server/src/permissions.js` are the hooks.
   - Possibly: rate-limiting signup/login and code checks (codes are 8
