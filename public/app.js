@@ -92,8 +92,8 @@
 
   // Pre-fills the purchase form from an existing item, so buying more of
   // something already tracked doesn't mean retyping name/category/location/unit.
-  // Quantity, purchase date, and expiration are left for the user since those
-  // typically differ on a new purchase.
+  // Quantity is the amount originally bought; purchase date is today; the
+  // expiration is left blank for the user, since it differs on a new purchase.
   function fillFormFromItem(item) {
     openSheet();
     setAddMode();
@@ -104,7 +104,11 @@
     document.getElementById('f-tag-select').value = item.tag || '';
     document.getElementById('f-tag-new').classList.add('hidden');
     document.getElementById('f-unit').value = item.unit;
-    document.getElementById('f-quantity').value = item.quantity > 0 ? item.quantity : 1;
+    // The amount originally bought (a 12-pack is 12), not what's left of it
+    // now. Falls back to the current quantity for anything that somehow
+    // lacks purchased_quantity.
+    var bought = item.purchased_quantity > 0 ? item.purchased_quantity : item.quantity;
+    document.getElementById('f-quantity').value = bought > 0 ? bought : 1;
     document.getElementById('f-purchase').value = new Date().toISOString().slice(0, 10);
     document.getElementById('f-expiration').value = '';
     document.getElementById('f-notes').value = '';

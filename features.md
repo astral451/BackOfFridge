@@ -442,22 +442,27 @@ priority — a Low item isn't necessarily more worth doing than a High one.
   planned together but built in order. Step 1 is small, fixes a bug in use
   today, and is the foundation step 2 builds on.
 
-  **Step 1 (Low): "Buy again" pre-fills the original purchase quantity,
-  not what's left.** Today `fillFormFromItem` (public/app.js) pre-fills
-  quantity from the item's *current* `quantity`. That number has already
-  been decremented by consumption, so re-buying a 12-pack of Coke with 3
-  cans left pre-fills 3 instead of 12.
-  - New migration adds `purchased_quantity` to `items`. It's set once at
-    creation (`POST /items`) and never touched by consume, throw-out, undo
-    or the +/- stepper. A recount/quick-set PATCH that corrects the count
-    shouldn't change it either: the 12-pack was still a 12-pack.
-  - "Buy again" pre-fills from `purchased_quantity`. For fill-level items
-    it also starts the fill at 100%, since a new purchase is full.
-  - Backfill: existing rows have no record of the original count. The
-    `item_events` purchase event may hold it; use that where present and
-    fall back to the current `quantity`.
+  **Step 1 (Low) — shipped: "Buy again" pre-fills the original purchase
+  quantity, not what's left.** `fillFormFromItem` (public/app.js) used to
+  pre-fill the item's *current* `quantity`. That number goes down with
+  consumption, so re-buying a 12-pack of Coke with 3 cans left pre-filled
+  3 instead of 12.
+  - Migration 003 adds `purchased_quantity` to `items`. `store.insertItem`
+    sets it from the starting quantity, and nothing else writes it:
+    consume, throw-out, undo, the +/- stepper, recounts and edits all leave
+    it alone, since the 12-pack was still a 12-pack. It isn't editable
+    through PATCH yet; add that if a typo at purchase time turns out to
+    need fixing.
+  - "Buy again" pre-fills from `purchased_quantity`, falling back to the
+    current quantity.
+  - Backfill: each existing item takes the quantity from its earliest
+    `purchased` event in `item_events` where there is one, otherwise its
+    current `quantity` (items from before events existed).
   - Scanning reuses it: the `products` default purchase quantity comes from
     the last purchase of that barcode, so scanning the Coke pre-fills 12.
+  - Not covered: "Buy again" on a fill-level item still logs the new
+    purchase as a count item, same as before. That carry-over belongs with
+    step 2.
 
   **Step 2 (Medium): fill level applies to the one open unit, not the
   whole item.** Today `fill_percent` and `quantity` are independent. Buy
@@ -481,9 +486,12 @@ priority — a Low item isn't necessarily more worth doing than a High one.
     `serialize`'s `low_stock` calculation in `server/src/routes/items.js`
     is where this changes.
   - Undo: the undo slot is `prev_status`/`prev_quantity` only, which can't
-    restore the open unit's previous fill. Add `prev_fill_percent` in the
-    same migration so undoing "finished a jug" brings back 2 jugs at the
-    old percentage.
+    restore the open unit's previous fill. Add `prev_fill_percent` (a new
+    migration) so undoing "finished a jug" brings back 2 jugs at the old
+    percentage.
+  - "Buy again" on a fill-level item should log the new purchase as a
+    fill-level item at 100% (a new purchase is full). Today the purchase
+    form only sends quantity/unit in add mode, so it becomes a count item.
 - **Photo capture + recall (Low/Medium)** — **decided: manual only, no
   recognition, at least for now.** Store a photo per item (new
   `item_photos` table or a `photo_path` column; files under the existing
