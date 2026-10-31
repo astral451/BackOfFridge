@@ -384,8 +384,106 @@ priority — a Low item isn't necessarily more worth doing than a High one.
 
 - **Location customization** — shipped: locations (and tags) are a managed
   list with add/delete, each household with its own.
-- **Barcode/visual scanning** — scan a barcode or product photo to quickly
-  re-up an item instead of retyping it (builds on "Buy again").
+- **Barcode/visual scanning (Medium)** — scan a barcode to quickly re-up an
+  item instead of retyping it (builds on "Buy again"). Its pre-filled
+  quantity depends on step 1 of "Quantity model" below.
+
+  **Direction chosen: server-side decoding, no on-device scanning library.**
+  The browser only captures; the server decodes and looks up.
+
+  - **Capture (browser):** a Scan button using
+    `<input type="file" accept="image/*" capture="environment">`. This opens
+    the phone's native camera, takes one photo and uploads it. It works
+    whether or not the page is on HTTPS. It's the same input and `multer`
+    upload that "Photo capture + recall" below plans, so the two can share
+    that plumbing. A live viewfinder (`getUserMedia`) would need HTTPS and
+    would in practice mean decoding on the phone, so it's out for now. It's
+    a possible add-on later, since the Cloudflare Tunnel setup already
+    provides HTTPS.
+  - **Typed barcode field:** a plain text field on the purchase form that
+    accepts digits. This covers USB/Bluetooth "keyboard-wedge" scanners,
+    which type the number and press Enter, plus manual entry. It also
+    serves the PC and Supernote, which have no useful camera. It feeds the
+    same lookup as the photo path.
+  - **Decoding (server): `zxing-wasm`** (zxing-cpp compiled to WebAssembly),
+    behind `POST /api/scan` (multipart image). Chosen over `zbarimg` for
+    three reasons:
+    - Future-proofing. Retail is moving to 2D barcodes (GS1 "Sunrise
+      2027": GS1 Digital Link QR codes and GS1 DataMatrix). zxing reads QR,
+      DataMatrix and GS1 data, which can carry the expiration date
+      (application identifier 17) and could auto-fill `expiration_date`.
+      ZBar can't read DataMatrix.
+    - Maintenance. zxing-cpp is actively developed; ZBar survives only as
+      a slow-moving maintenance fork.
+    - Fit. It's a pure npm package with no native build or extra Docker
+      system package, and the same package could run in the browser later.
+    - Practical notes: shrink large phone photos before decoding, and check
+      on a real iPhone that Safari uploads JPEG rather than HEIC. If a
+      stubborn 1D barcode case turns up, zbar can be added later as a
+      fallback behind the same endpoint.
+  - **Lookup order:** (1) this household's own saved products → (2) the
+    Open Food Facts API (free, no key; returns name, brand, package size,
+    image), called by the server so there's no CORS issue, with the result
+    cached → (3) not found: the user types the name once and it's saved for
+    next time. Either way the result pre-fills the purchase form through
+    `fillFormFromItem`, and the user confirms before saving.
+  - **Schema (new migration):** a `barcode` column on `items`, plus a
+    `products` table (barcode, name, brand, default category, location,
+    unit and purchase quantity, source `local`/`openfoodfacts`,
+    fetched_at). The household-specific parts (names you typed, default
+    location and quantity) are scoped by `household_id` like everything
+    else. Cached Open Food Facts data is public, so it could be shared
+    across households, but scoping it too is simpler and safe.
+  - **Later, optional:** send the same uploaded photo to a vision model to
+    identify barcode-less items (produce) or read a printed "best by" date.
+    This needs an API key and costs per call, so it's phase 2.
+- **Quantity model: purchased amount and per-unit fill level (Low → Medium,
+  two steps)** — two related fixes to what an item's `quantity` means,
+  planned together but built in order. Step 1 is small, fixes a bug in use
+  today, and is the foundation step 2 builds on.
+
+  **Step 1 (Low): "Buy again" pre-fills the original purchase quantity,
+  not what's left.** Today `fillFormFromItem` (public/app.js) pre-fills
+  quantity from the item's *current* `quantity`. That number has already
+  been decremented by consumption, so re-buying a 12-pack of Coke with 3
+  cans left pre-fills 3 instead of 12.
+  - New migration adds `purchased_quantity` to `items`. It's set once at
+    creation (`POST /items`) and never touched by consume, throw-out, undo
+    or the +/- stepper. A recount/quick-set PATCH that corrects the count
+    shouldn't change it either: the 12-pack was still a 12-pack.
+  - "Buy again" pre-fills from `purchased_quantity`. For fill-level items
+    it also starts the fill at 100%, since a new purchase is full.
+  - Backfill: existing rows have no record of the original count. The
+    `item_events` purchase event may hold it; use that where present and
+    fall back to the current `quantity`.
+  - Scanning reuses it: the `products` default purchase quantity comes from
+    the last purchase of that barcode, so scanning the Coke pre-fills 12.
+
+  **Step 2 (Medium): fill level applies to the one open unit, not the
+  whole item.** Today `fill_percent` and `quantity` are independent. Buy
+  two gallons of milk and track by fill level, and the `−` stepper's "at
+  or below 10% fully consumes the item" rule throws away **both** jugs when
+  the first one runs out. The low-stock badge also fires on the open jug's
+  percentage even when a sealed backup is in the fridge. Normally only one
+  unit is open at a time.
+  - For a fill-level item with `quantity` > 1, `fill_percent` describes
+    only the **currently open unit**. The rest are assumed sealed/full.
+    Display it as e.g. "2 gal: 1 sealed, 1 at 40%".
+  - The slider, the `−`/`+` stepper (10-point steps) and the quick-set
+    number box all change only the open unit's `fill_percent`.
+  - Finishing the open unit (`−` at or below 10%, or slider to 0)
+    **decrements `quantity` by 1 and resets `fill_percent` to 100** for
+    the next unit. It's recorded as a one-unit consume event. Only the last
+    unit finishing consumes the whole item, which is today's behavior.
+  - Low stock: flag only when it's the last unit (`quantity` = 1) and its
+    fill is at or below the threshold. Equivalently, flag when total
+    remaining (`quantity` − 1 + `fill_percent` / 100 units) is low.
+    `serialize`'s `low_stock` calculation in `server/src/routes/items.js`
+    is where this changes.
+  - Undo: the undo slot is `prev_status`/`prev_quantity` only, which can't
+    restore the open unit's previous fill. Add `prev_fill_percent` in the
+    same migration so undoing "finished a jug" brings back 2 jugs at the
+    old percentage.
 - **Photo capture + recall (Low/Medium)** — **decided: manual only, no
   recognition, at least for now.** Store a photo per item (new
   `item_photos` table or a `photo_path` column; files under the existing
