@@ -4,4 +4,5 @@
 module.exports = [
   { version: 1, name: 'baseline', up: require('./001_baseline') },
   { version: 2, name: 'households', up: require('./002_households') },
+  { version: 3, name: 'purchased_quantity', up: require('./003_purchased_quantity') },
 ];

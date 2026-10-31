@@ -56,12 +56,15 @@ function getItem(householdId, id) {
   return db.prepare('SELECT * FROM items WHERE id = ? AND household_id = ?').get(id, requireHousehold(householdId));
 }
 
+// purchased_quantity is the amount bought (migration 003). It's set here,
+// from the starting quantity, and nothing else writes it - updateItem and
+// the consume/undo functions below leave it alone.
 function insertItem(householdId, fields) {
   const result = db.prepare(`
-    INSERT INTO items (household_id, name, category, location, tag, quantity, unit, purchase_date,
-      expiration_date, notes, tracking_mode, fill_percent, low_stock_threshold)
-    VALUES (@household_id, @name, @category, @location, @tag, @quantity, @unit, @purchase_date,
-      @expiration_date, @notes, @tracking_mode, @fill_percent, @low_stock_threshold)
+    INSERT INTO items (household_id, name, category, location, tag, quantity, purchased_quantity, unit,
+      purchase_date, expiration_date, notes, tracking_mode, fill_percent, low_stock_threshold)
+    VALUES (@household_id, @name, @category, @location, @tag, @quantity, @quantity, @unit,
+      @purchase_date, @expiration_date, @notes, @tracking_mode, @fill_percent, @low_stock_threshold)
   `).run({ ...fields, household_id: requireHousehold(householdId) });
   return getItem(householdId, result.lastInsertRowid);
 }

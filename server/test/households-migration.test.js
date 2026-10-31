@@ -9,6 +9,9 @@ const Database = require('better-sqlite3');
 const { migrate, currentVersion, MIGRATIONS } = require('../src/migrate');
 
 const UP_TO_1 = MIGRATIONS.slice(0, 1);
+// Stop at households itself, so later migrations don't change what these
+// tests check.
+const UP_TO_2 = MIGRATIONS.slice(0, 2);
 
 function tempDb(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bof-test-'));
@@ -38,7 +41,7 @@ test('existing data all moves into household #1, untouched', (t) => {
   const itemsBefore = db.prepare('SELECT * FROM items ORDER BY id').all();
   const eventsBefore = db.prepare('SELECT * FROM item_events ORDER BY id').all();
 
-  migrate(db);
+  migrate(db, { migrations: UP_TO_2 });
   assert.strictEqual(currentVersion(db), 2);
 
   const households = db.prepare('SELECT id, name, invite_code FROM households').all();
@@ -72,14 +75,14 @@ test('existing data all moves into household #1, untouched', (t) => {
 
 test('a brand-new database gets no household', (t) => {
   const { db } = tempDb(t);
-  migrate(db);
+  migrate(db, { migrations: UP_TO_2 });
   assert.strictEqual(currentVersion(db), 2);
   assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM households').get().n, 0);
 });
 
 test('two households can use the same location and tag names', (t) => {
   const { db } = populatedV1(t);
-  migrate(db);
+  migrate(db, { migrations: UP_TO_2 });
   db.prepare("INSERT INTO households (name, invite_code) VALUES ('Second', 'ZZZZZZZZ')").run();
   db.exec("INSERT INTO locations (household_id, name) VALUES (2, 'Pantry'), (2, 'fridge')");
   db.exec("INSERT INTO tags (household_id, name) VALUES (2, 'dairy')");
@@ -91,7 +94,7 @@ test('two households can use the same location and tag names', (t) => {
 
 test('items, events, locations and tags cannot be written without a household', (t) => {
   const { db } = populatedV1(t);
-  migrate(db);
+  migrate(db, { migrations: UP_TO_2 });
   assert.throws(() => db.exec("INSERT INTO items (name) VALUES ('Orphan')"), /items.household_id is required/);
   assert.throws(() => db.exec("INSERT INTO item_events (item_name, event_type) VALUES ('Orphan', 'purchased')"), /item_events.household_id is required/);
   assert.throws(() => db.exec("INSERT INTO locations (name) VALUES ('Garage')"), /NOT NULL/);
@@ -101,7 +104,7 @@ test('items, events, locations and tags cannot be written without a household', 
 
 test('an item or event cannot be moved to another household', (t) => {
   const { db } = populatedV1(t);
-  migrate(db);
+  migrate(db, { migrations: UP_TO_2 });
   db.prepare("INSERT INTO households (name, invite_code) VALUES ('Second', 'ZZZZZZZZ')").run();
   assert.throws(() => db.exec('UPDATE items SET household_id = 2 WHERE id = 1'), /cannot be changed/);
   assert.throws(() => db.exec('UPDATE item_events SET household_id = NULL WHERE id = 1'), /cannot be changed/);
@@ -110,7 +113,7 @@ test('an item or event cannot be moved to another household', (t) => {
 
 test('new accounts default to pending, and status only takes known values', (t) => {
   const { db } = populatedV1(t);
-  migrate(db);
+  migrate(db, { migrations: UP_TO_2 });
   db.exec("INSERT INTO users (username, password_hash) VALUES ('newcomer', 'h3')");
   const row = db.prepare("SELECT status, household_id, is_admin FROM users WHERE username = 'newcomer'").get();
   assert.deepStrictEqual(row, { status: 'pending', household_id: null, is_admin: 0 });
@@ -122,7 +125,7 @@ test('migrate-check reports every row landing in household #1', (t) => {
   db.close();
   const out = execFileSync(process.execPath, [path.join(__dirname, '..', 'scripts', 'migrate-check.js'), file], { encoding: 'utf8' });
   assert.match(out, /BEFORE: version 1/);
-  assert.match(out, /AFTER: version 2/);
+  assert.match(out, new RegExp(`AFTER: version ${MIGRATIONS.length}`));
   assert.match(out, /items\s+#1 "Household 1"\s+1\n/);
   assert.match(out, /item_events\s+#1 "Household 1"\s+2\n/);
   assert.match(out, /users\s+#1 "Household 1"\s+2\n/);
