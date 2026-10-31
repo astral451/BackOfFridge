@@ -33,6 +33,69 @@
   list needs to be scoped per family like everything else.
 - **Barcode/visual scanning** — scan a barcode or product photo to quickly
   re-up an item instead of retyping it (builds on "Buy again").
+
+  **Direction chosen: server-side decoding, no on-device scanning library.**
+  The browser only captures; the server decodes and looks up.
+
+  - **Capture (browser):** a Scan button using
+    `<input type="file" accept="image/*" capture="environment">`. This opens
+    the phone's native camera, takes one photo and uploads it. It works over
+    plain HTTP. A live camera viewfinder (`getUserMedia`) would need HTTPS
+    and would in practice mean decoding on the phone, so it's out for now.
+    It's a possible later add-on if the app is ever served over HTTPS
+    (Caddy/Tailscale).
+  - **Typed barcode field:** a plain text field on the Add form that accepts
+    digits. This covers USB/Bluetooth "keyboard-wedge" scanners, which type
+    the number and press Enter, plus manual entry. It also serves the PC and
+    Supernote, which have no useful camera. It feeds the same lookup as the
+    photo path.
+  - **Decoding (server): `zxing-wasm`** (zxing-cpp compiled to WebAssembly),
+    behind `POST /api/scan` (multipart image). Chosen over `zbarimg` for
+    three reasons:
+    - Future-proofing. Retail is moving to 2D barcodes (GS1 "Sunrise 2027":
+      GS1 Digital Link QR codes and GS1 DataMatrix). zxing reads QR,
+      DataMatrix and GS1 data, which can carry the expiration date
+      (application identifier 17) and could auto-fill `expiration_date`.
+      ZBar can't read DataMatrix.
+    - Maintenance. zxing-cpp is actively developed; ZBar survives only as a
+      slow-moving maintenance fork.
+    - Fit. It's a pure npm package with no native build or extra Docker
+      system package, and the same package could run in the browser later.
+    - Practical notes: shrink large phone photos before decoding, and check
+      on a real iPhone that Safari uploads JPEG rather than HEIC. If a
+      stubborn 1D barcode case turns up, zbar can be added later as a
+      fallback behind the same endpoint.
+  - **Lookup order:** (1) local `products` table → (2) Open Food Facts API
+    (free, no key; returns name, brand, package size, image) called by the
+    server so there's no CORS issue, with the result cached into
+    `products` → (3) not found: the user types the name once and it's saved
+    to `products` for next time. Either way the result pre-fills the
+    purchase form (same as "Buy again"), and the user confirms before
+    saving.
+  - **Schema:** a `barcode` column on `items`, plus a new `products` table
+    (barcode PK, name, brand, default category/location/unit, default
+    purchase quantity, source `local`/`openfoodfacts`, fetched_at).
+  - **Later, optional:** send the same uploaded photo to a vision model to
+    identify barcode-less items (produce) or read a printed "best by" date.
+    This needs an API key and costs per call, so it's phase 2.
+
+  **Sub-feature: "Buy again" uses the original purchase quantity, not
+  what's left.** Today `fillFormFromItem` (public/app.js) pre-fills
+  quantity from the item's *current* `quantity`. That number has already
+  been decremented by consumption, so re-buying a 12-pack of Coke with 3
+  cans left pre-fills 3 instead of 12. (The function's comment also says
+  quantity is "left for the user", which no longer matches the code.)
+  - Add a `purchased_quantity` column to `items`, set once at creation
+    (`POST /items`) and never touched by consume/throw-out/undo. A PATCH
+    that corrects the count shouldn't change it either; the 12-pack was
+    still a 12-pack.
+  - "Buy again" pre-fills from `purchased_quantity`.
+  - Migration: existing rows have no record of the original count, so
+    backfill `purchased_quantity = quantity` (best available guess).
+  - Ties into scanning: `products` keeps a default purchase quantity, so a
+    scanned barcode pre-fills "12" too. That value comes from the last
+    purchase of that barcode, or from Open Food Facts' package info where
+    it gives a usable count.
 - **Pattern and consumption tracking** — record every action (purchase,
   consume, throw-out, edit, undo) with a timestamp, so trends over time
   become answerable: how often something's rebought, how much of it
@@ -120,6 +183,26 @@
     control not rendering usably on the Supernote's browser (the location
     datalist). Worth a quick real-device check on Supernote before
     committing to a specific slider implementation.
+
+  **Sub-feature: the fill level applies to the one open unit, not the
+  whole quantity.** Buying two gallons of milk and tracking by fill level
+  shouldn't treat "50%" as half of both jugs. Normally only one is open at
+  a time.
+  - For an item with `quantity` > 1 in `fill_level` mode, `fill_percent`
+    describes only the **currently open unit**. The rest are assumed
+    sealed/full. Display it as e.g. "2 gal: 1 sealed, 1 at 40%".
+  - Dragging the meter only changes that open unit's `fill_percent`.
+  - Finishing the open unit (meter to 0%, or Consume) **decrements
+    `quantity` by 1** and resets `fill_percent` to 100% for the next unit.
+    When the last unit hits 0%, the item is consumed as usual.
+  - Low-stock should look at what's actually left: with a sealed backup on
+    hand, the open jug at 20% isn't "running low". Flag only when the open
+    unit is below the threshold **and** it's the last one (`quantity` = 1),
+    or equivalently when total remaining (`quantity` − 1 + `fill_percent`
+    / 100) drops below the threshold.
+  - Undo needs to cover this too: `prev_quantity` alone can't restore the
+    open unit's previous fill level, so add a `prev_fill_percent` to the
+    undo slot (or record it in `item_events` once that exists).
 
 ## Open design question: multi-family data isolation
 
