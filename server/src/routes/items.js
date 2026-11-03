@@ -10,15 +10,17 @@ const VALID_CATEGORY = ['perishable', 'nonperishable'];
 const VALID_TRACKING_MODE = ['count', 'fill_level'];
 const DEFAULT_LOW_STOCK_FILL_THRESHOLD = 25;
 
-// Adds a computed `low_stock` flag: for fill_level items, fill_percent at or
-// below the threshold (default 25%); for count items, quantity at or below
-// the threshold, only when one's been explicitly set (there's no sensible
-// universal default across totally different units).
+// Adds a computed `low_stock` flag: for fill_level items, the open unit's
+// fill_percent at or below the threshold (default 25%) *and* no full units
+// left behind it - two jugs of milk with the open one at 20% isn't running
+// low; for count items, quantity at or below the threshold, only when
+// one's been explicitly set (there's no sensible universal default across
+// totally different units).
 function serialize(row) {
   let lowStock = false;
   if (row.tracking_mode === 'fill_level') {
     const threshold = row.low_stock_threshold != null ? row.low_stock_threshold : DEFAULT_LOW_STOCK_FILL_THRESHOLD;
-    lowStock = row.fill_percent != null && row.fill_percent <= threshold;
+    lowStock = row.quantity <= 1 && row.fill_percent != null && row.fill_percent <= threshold;
   } else if (row.low_stock_threshold != null) {
     lowStock = row.quantity <= row.low_stock_threshold;
   }
@@ -176,6 +178,11 @@ router.patch('/:id', requirePermission('items:write'), (req, res) => {
 // Reduce an active item's quantity by `amount` (or all of it if omitted/>=
 // remaining), setting `status` once none is left. Remembers the prior
 // status/quantity so a single /undo can reverse this call.
+//
+// Fill-level items: `quantity` counts units (2 jugs of milk) and
+// fill_percent describes only the one that's open - the rest are full.
+// Removing units uses up the open one first, so if any are left the next
+// one starts at 100%. The old percentage goes in the undo slot.
 function reduceQuantity(householdId, id, status, amount, username, extra) {
   const existing = store.getItem(householdId, id);
   if (!existing) return null;
@@ -184,15 +191,20 @@ function reduceQuantity(householdId, id, status, amount, username, extra) {
     ? existing.quantity
     : amount;
   const remaining = existing.quantity - removed;
+  const isFill = existing.tracking_mode === 'fill_level';
 
   const row = store.updateItemQuantity(householdId, existing.id, {
     quantity: remaining,
     status: remaining > 0 ? 'active' : status,
+    fillPercent: isFill && remaining > 0 ? 100 : existing.fill_percent,
     prevStatus: existing.status,
     prevQuantity: existing.quantity,
+    prevFillPercent: isFill ? existing.fill_percent : null,
     thrownOutDate: remaining > 0 ? existing.thrown_out_date : (extra && extra.thrown_out_date) || null,
   });
-  store.recordEvent(householdId, existing.id, existing.name, status, { quantity: removed, unit: existing.unit }, username);
+  const detail = { quantity: removed, unit: existing.unit };
+  if (isFill) detail.open_fill_percent = existing.fill_percent;
+  store.recordEvent(householdId, existing.id, existing.name, status, detail, username);
   return row;
 }
 
@@ -228,7 +240,9 @@ router.post('/:id/undo', requirePermission('items:write'), (req, res) => {
   }
 
   const row = store.undoItem(req.householdId, existing);
-  store.recordEvent(req.householdId, existing.id, existing.name, 'undo', { restored_status: existing.prev_status, restored_quantity: existing.prev_quantity }, req.username);
+  const detail = { restored_status: existing.prev_status, restored_quantity: existing.prev_quantity };
+  if (existing.prev_fill_percent != null) detail.restored_fill_percent = existing.prev_fill_percent;
+  store.recordEvent(req.householdId, existing.id, existing.name, 'undo', detail, req.username);
   res.json(serialize(row));
 });
 

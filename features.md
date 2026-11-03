@@ -464,34 +464,35 @@ priority — a Low item isn't necessarily more worth doing than a High one.
     purchase as a count item, same as before. That carry-over belongs with
     step 2.
 
-  **Step 2 (Medium): fill level applies to the one open unit, not the
-  whole item.** Today `fill_percent` and `quantity` are independent. Buy
-  two gallons of milk and track by fill level, and the `−` stepper's "at
-  or below 10% fully consumes the item" rule throws away **both** jugs when
-  the first one runs out. The low-stock badge also fires on the open jug's
-  percentage even when a sealed backup is in the fridge. Normally only one
-  unit is open at a time.
-  - For a fill-level item with `quantity` > 1, `fill_percent` describes
-    only the **currently open unit**. The rest are assumed sealed/full.
-    Display it as e.g. "2 gal: 1 sealed, 1 at 40%".
-  - The slider, the `−`/`+` stepper (10-point steps) and the quick-set
-    number box all change only the open unit's `fill_percent`.
-  - Finishing the open unit (`−` at or below 10%, or slider to 0)
-    **decrements `quantity` by 1 and resets `fill_percent` to 100** for
-    the next unit. It's recorded as a one-unit consume event. Only the last
-    unit finishing consumes the whole item, which is today's behavior.
-  - Low stock: flag only when it's the last unit (`quantity` = 1) and its
-    fill is at or below the threshold. Equivalently, flag when total
-    remaining (`quantity` − 1 + `fill_percent` / 100 units) is low.
-    `serialize`'s `low_stock` calculation in `server/src/routes/items.js`
-    is where this changes.
-  - Undo: the undo slot is `prev_status`/`prev_quantity` only, which can't
-    restore the open unit's previous fill. Add `prev_fill_percent` (a new
-    migration) so undoing "finished a jug" brings back 2 jugs at the old
-    percentage.
-  - "Buy again" on a fill-level item should log the new purchase as a
-    fill-level item at 100% (a new purchase is full). Today the purchase
-    form only sends quantity/unit in add mode, so it becomes a count item.
+  **Step 2 (Medium) — built on branch `claude/fill-level-per-unit`, being
+  tested before it goes to main: fill level applies to the one open unit,
+  not the whole item.** Before this, `fill_percent` and `quantity` were
+  independent. With two gallons of milk tracked by fill level, the `−`
+  stepper's "at or below 10% fully consumes the item" rule threw away
+  **both** jugs when the first one ran out, and the low-stock badge fired on
+  the open jug's percentage even with a full backup in the fridge.
+  - For a fill-level item, `quantity` counts units and `fill_percent`
+    describes only the **currently open unit**; the rest are full. Rows
+    (main list and At a Glance) show e.g. "40% + 1 full".
+  - The `−`/`+` stepper (10-point steps) and the quick-set number box
+    change only the open unit's `fill_percent`.
+  - Finishing the open unit (`−` at or below 10%, or quick-setting 0%)
+    consumes **one unit**. `reduceQuantity` (server/src/routes/items.js)
+    handles the rest: if any units are left it starts the next at 100%;
+    on the last unit the item is consumed, as before. Throw-out works the
+    same way, and the "Consumed"/"Throw out" menu prompts count units. The
+    event records the open unit's percentage (`open_fill_percent`).
+  - Low stock (`serialize`): only when it's the last unit (`quantity` ≤ 1)
+    and its fill is at or below the threshold.
+  - Undo: migration 004 adds `prev_fill_percent` to the undo slot, so
+    undoing "finished a jug" brings back both jugs at the old percentage.
+  - The Edit form shows quantity and unit for fill-level items too (it
+    used to hide them, so there was no way to say you had 2 jugs), with
+    the fill box labelled "Open one, % full".
+  - "Buy again" on a fill-level item logs the new purchase as a fill-level
+    item at 100%.
+  - Not changed: `low_stock` is still computed for consumed/thrown-out
+    items as well as active ones, same as before.
 - **Photo capture + recall (Low/Medium)** — **decided: manual only, no
   recognition, at least for now.** Store a photo per item (new
   `item_photos` table or a `photo_path` column; files under the existing

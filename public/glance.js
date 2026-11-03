@@ -80,14 +80,15 @@
 
   // Quick +/- for the common "used/added one" case, with no prompt - the
   // one deliberate exception to this page's otherwise read-only design.
-  // Count-tracked items step by 1; fill-level items step by 10 percentage
-  // points, and a - at or below 10% fully consumes the item instead of
-  // going negative (mirrors reduceQuantity's floor-at-zero on the server).
+  // Count-tracked items step by 1; fill-level items step the open unit by
+  // 10 percentage points, and a - at or below 10% finishes that unit
+  // (consumes 1) - the server starts the next one at 100%, or uses the item
+  // up if it was the last.
   function quickAdjust(item, delta) {
     if (item.tracking_mode === 'fill_level') {
       var current = item.fill_percent != null ? item.fill_percent : 100;
       if (delta < 0 && current <= 10) {
-        apiFetch('/items/' + item.id + '/consume', { method: 'POST', body: JSON.stringify({}) })
+        apiFetch('/items/' + item.id + '/consume', { method: 'POST', body: JSON.stringify({ quantity: 1 }) })
           .then(refresh)
           .catch(function (err) { alert(err.message); });
         return;
@@ -141,9 +142,14 @@
 
     var qtyVal = document.createElement('div');
     qtyVal.className = 'qty-val';
-    qtyVal.textContent = item.tracking_mode === 'fill_level'
-      ? (item.fill_percent != null ? item.fill_percent : 100) + '%'
-      : item.quantity + (item.unit ? ' ' + item.unit : '');
+    // Same label as the main page: "40% + 1 full" when there's a full
+    // unit behind the open one.
+    if (item.tracking_mode === 'fill_level') {
+      qtyVal.textContent = (item.fill_percent != null ? item.fill_percent : 100) + '%'
+        + (item.quantity > 1 ? ' + ' + (item.quantity - 1) + ' full' : '');
+    } else {
+      qtyVal.textContent = item.quantity + (item.unit ? ' ' + item.unit : '');
+    }
     wrap.appendChild(qtyVal);
 
     if (item.tracking_mode === 'fill_level') {
