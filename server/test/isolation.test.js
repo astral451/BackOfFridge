@@ -17,6 +17,8 @@ const { execFileSync } = require('child_process');
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bof-isolation-'));
 process.env.DB_PATH = path.join(dir, 'inventory.db');
 process.env.LOG_PATH = path.join(dir, 'app.log');
+// Nothing listens here: product lookups never leave the machine.
+process.env.OFF_BASE_URL = 'http://127.0.0.1:9';
 
 const app = require('../src/index');
 const db = require('../src/db');
@@ -207,6 +209,24 @@ test('a household id sent by the client is ignored', async () => {
   assert.ok(bList.every((i) => ids.B.includes(i.id)));
 });
 
+test("a barcode one household taught is unknown to the other, and each keeps its own name", async () => {
+  // The items are deleted again at the end, so later tests' counts hold;
+  // what each household learned stays in products.
+  const alicesCoke = await alice.post('/api/items', { name: 'Coke', barcode: '5449000000996', location: 'Pantry' });
+  assert.strictEqual(alicesCoke.status, 201);
+  const bobsLookup = (await bob.get('/api/products/5449000000996')).body;
+  assert.strictEqual(bobsLookup.product, null);
+
+  const bobsCola = await bob.post('/api/items', { name: 'Cola', barcode: '5449000000996', location: 'Garage' });
+  assert.strictEqual(bobsCola.status, 201);
+  assert.strictEqual((await alice.del(`/api/items/${alicesCoke.body.id}`)).status, 204);
+  assert.strictEqual((await bob.del(`/api/items/${bobsCola.body.id}`)).status, 204);
+  assert.strictEqual((await alice.get('/api/products/5449000000996')).body.product.name, 'Coke');
+  assert.strictEqual((await bob.get('/api/products/5449000000996')).body.product.name, 'Cola');
+  const rows = db.prepare("SELECT household_id, name FROM products WHERE barcode = '5449000000996' ORDER BY household_id").all();
+  assert.deepStrictEqual(rows, [{ household_id: households.Alpha, name: 'Coke' }, { household_id: households.Bravo, name: 'Cola' }]);
+});
+
 test('every event is recorded in the household it happened in', () => {
   const wrong = db.prepare(`
     SELECT e.id FROM item_events e JOIN items i ON i.id = e.item_id WHERE e.household_id != i.household_id
@@ -218,6 +238,8 @@ test('every event is recorded in the household it happened in', () => {
 const HOUSEHOLD_ENDPOINTS = [
   ['get', '/api/items'],
   ['get', '/api/items/1'],
+  ['get', '/api/products/5449000000996'],
+  ['post', '/api/scan', {}],
   ['get', '/api/items/1/history'],
   ['post', '/api/items', { name: 'X' }],
   ['patch', '/api/items/1', { name: 'X' }],

@@ -371,6 +371,40 @@ button.small:disabled { opacity: 0.4; cursor: not-allowed; }
   font-weight: 700;
   cursor: pointer;
 }
+.bottombar button.secondary {
+  background: var(--surface);
+  color: var(--accent);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Barcode field + Scan button at the top of the purchase sheet. */
+.barcode-row { display: flex; gap: 8px; }
+.barcode-row input[type="text"] { flex: 1; min-width: 0; }
+.scan-btn {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 700;
+  padding: 8px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--accent);
+  background: var(--surface);
+  color: var(--accent);
+  cursor: pointer;
+}
+.scan-btn:disabled { opacity: 0.6; cursor: progress; }
+.scan-status { font-size: 0.82rem; color: var(--muted); line-height: 1.35; }
+.scan-status.error { color: var(--danger-text); }
+.scan-status.found { color: var(--text); }
+/* Kept in the page (not display:none) so .click() opens the camera
+   reliably on every browser, but out of sight and out of the tab order. */
+.offscreen { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; overflow: hidden; }
+
 .sheet {
   position: fixed;
   left: 0; right: 0; bottom: 0;

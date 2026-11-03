@@ -62,10 +62,10 @@ function getItem(householdId, id) {
 function insertItem(householdId, fields) {
   const result = db.prepare(`
     INSERT INTO items (household_id, name, category, location, tag, quantity, purchased_quantity, unit,
-      purchase_date, expiration_date, notes, tracking_mode, fill_percent, low_stock_threshold)
+      purchase_date, expiration_date, notes, tracking_mode, fill_percent, low_stock_threshold, barcode)
     VALUES (@household_id, @name, @category, @location, @tag, @quantity, @quantity, @unit,
-      @purchase_date, @expiration_date, @notes, @tracking_mode, @fill_percent, @low_stock_threshold)
-  `).run({ ...fields, household_id: requireHousehold(householdId) });
+      @purchase_date, @expiration_date, @notes, @tracking_mode, @fill_percent, @low_stock_threshold, @barcode)
+  `).run({ barcode: null, ...fields, household_id: requireHousehold(householdId) });
   return getItem(householdId, result.lastInsertRowid);
 }
 
@@ -76,9 +76,9 @@ function updateItem(householdId, item) {
     UPDATE items SET name=@name, category=@category, location=@location, tag=@tag, quantity=@quantity,
       unit=@unit, purchase_date=@purchase_date, expiration_date=@expiration_date,
       status=@status, notes=@notes, tracking_mode=@tracking_mode, fill_percent=@fill_percent,
-      low_stock_threshold=@low_stock_threshold, updated_at=datetime('now')
+      low_stock_threshold=@low_stock_threshold, barcode=@barcode, updated_at=datetime('now')
     WHERE id=@id AND household_id=@household_id
-  `).run({ ...item, household_id: requireHousehold(householdId) });
+  `).run({ barcode: null, ...item, household_id: requireHousehold(householdId) });
   return getItem(householdId, item.id);
 }
 
@@ -171,6 +171,52 @@ function itemHistory(householdId, itemId) {
   `).all(itemId, requireHousehold(householdId));
 }
 
+// --- Products (barcodes) ------------------------------------------------
+
+// What this household knows about a barcode (migration 005), or undefined.
+function getProduct(householdId, barcode) {
+  return db.prepare('SELECT * FROM products WHERE household_id = ? AND barcode = ?')
+    .get(requireHousehold(householdId), barcode);
+}
+
+// Caches an Open Food Facts result. Never overwrites a 'local' row: what
+// the household chose for a product beats the public database.
+function cacheProductLookup(householdId, barcode, { name, brand, package: pkg, image_url }) {
+  db.prepare(`
+    INSERT INTO products (household_id, barcode, name, brand, package, image_url, source)
+    VALUES (@household_id, @barcode, @name, @brand, @package, @image_url, 'openfoodfacts')
+    ON CONFLICT (household_id, barcode) DO NOTHING
+  `).run({ household_id: requireHousehold(householdId), barcode, name, brand, package: pkg, image_url });
+  return getProduct(householdId, barcode);
+}
+
+// Remembers a purchase made with a barcode: the name and choices on that
+// item become what scanning the barcode pre-fills next time. Any cached
+// brand/package/image is kept.
+function rememberProduct(householdId, item) {
+  db.prepare(`
+    INSERT INTO products (household_id, barcode, name, category, location, tag, unit,
+      purchase_quantity, tracking_mode, source)
+    VALUES (@household_id, @barcode, @name, @category, @location, @tag, @unit,
+      @purchase_quantity, @tracking_mode, 'local')
+    ON CONFLICT (household_id, barcode) DO UPDATE SET
+      name = excluded.name, category = excluded.category, location = excluded.location,
+      tag = excluded.tag, unit = excluded.unit, purchase_quantity = excluded.purchase_quantity,
+      tracking_mode = excluded.tracking_mode, source = 'local', updated_at = datetime('now')
+  `).run({
+    household_id: requireHousehold(householdId),
+    barcode: item.barcode,
+    name: item.name,
+    category: item.category,
+    location: item.location,
+    tag: item.tag,
+    unit: item.unit,
+    purchase_quantity: item.purchased_quantity != null ? item.purchased_quantity : item.quantity,
+    tracking_mode: item.tracking_mode,
+  });
+  return getProduct(householdId, item.barcode);
+}
+
 // --- Locations and tags --------------------------------------------------
 // Both are managed lists with the same shape: (household_id, name), names
 // case-insensitive within a household. `kind` picks the table and the
@@ -239,6 +285,9 @@ module.exports = {
   updateItemQuantity,
   undoItem,
   deleteItem,
+  getProduct,
+  cacheProductLookup,
+  rememberProduct,
   itemStats,
   recordEvent,
   itemHistory,

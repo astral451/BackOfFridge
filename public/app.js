@@ -20,7 +20,9 @@
 
   function apiFetch(path, opts) {
     opts = opts || {};
-    opts.headers = Object.assign({}, opts.headers, { 'Content-Type': 'application/json' });
+    // JSON unless the caller says otherwise (the barcode photo upload sends
+    // the image's own type).
+    opts.headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers);
     return fetch('/api' + path, opts).then(function (res) {
       if (res.status === 401) {
         redirectToLogin();
@@ -118,6 +120,7 @@
     document.getElementById('f-purchase').value = new Date().toISOString().slice(0, 10);
     document.getElementById('f-expiration').value = '';
     document.getElementById('f-notes').value = '';
+    document.getElementById('f-barcode').value = item.barcode || '';
     expandMoreFields();
     document.getElementById('itemSheet').scrollIntoView({ behavior: 'smooth' });
     document.getElementById('f-expiration').focus();
@@ -686,6 +689,8 @@
     document.getElementById('f-location-new').classList.add('hidden');
     document.getElementById('f-tag-new').classList.add('hidden');
     document.getElementById('moreFields').hidden = true;
+    setScanStatus('');
+    lastLookedUp = null;
     setDefaultPurchaseDate();
     setAddMode();
   }
@@ -710,6 +715,8 @@
     document.getElementById('f-purchase').value = item.purchase_date || '';
     document.getElementById('f-expiration').value = item.expiration_date || '';
     document.getElementById('f-notes').value = item.notes || '';
+    document.getElementById('f-barcode').value = item.barcode || '';
+    setScanStatus('');
 
     document.getElementById('f-quantity').value = item.quantity;
     document.getElementById('f-unit').value = item.unit || '';
@@ -1348,6 +1355,134 @@
     }
   });
 
+  // --- Barcode scanning -----------------------------------------------
+  // The Scan buttons open the phone's own camera through a file input; the
+  // photo goes to the server (POST /api/scan), which reads the barcode and
+  // looks the product up. Typing a barcode - or a USB/Bluetooth scanner,
+  // which "types" it and presses Enter - uses GET /api/products/:barcode.
+  // Both answers pre-fill the form the same way; nothing is saved until
+  // the user taps Add.
+  var lastLookedUp = null;
+
+  function setScanStatus(text, kind) {
+    var el = document.getElementById('scanStatus');
+    el.textContent = text;
+    el.className = 'scan-status full' + (kind ? ' ' + kind : '');
+    el.hidden = !text;
+  }
+
+  function setScanBusy(busy) {
+    var btn = document.getElementById('scanBtn');
+    btn.disabled = busy;
+  }
+
+  function applyLookup(result) {
+    var barcodeInput = document.getElementById('f-barcode');
+    if (!result.barcode) {
+      var read = result.codes && result.codes[0] ? ' (it reads "' + result.codes[0].text + '")' : '';
+      setScanStatus('That code isn\'t a product barcode' + read + '.', 'error');
+      return;
+    }
+    barcodeInput.value = result.barcode;
+    lastLookedUp = result.barcode;
+    if (result.expiration_date) {
+      document.getElementById('f-expiration').value = result.expiration_date;
+      expandMoreFields();
+    }
+    var expiryNote = result.expiration_date ? ' Expiry date read from the code.' : '';
+
+    // Editing an existing item: just attach the barcode, don't overwrite
+    // what's already there.
+    if (editingItemId) {
+      setScanStatus('Barcode set. Save to remember it for this item.' + expiryNote, 'found');
+      return;
+    }
+
+    var p = result.product;
+    if (!p) {
+      setScanStatus((result.lookup_error
+        ? 'Couldn\'t reach Open Food Facts. '
+        : 'New barcode. ') + 'Type the name, and it\'ll be remembered next time.' + expiryNote);
+      document.getElementById('f-name').focus();
+      return;
+    }
+
+    document.getElementById('f-name').value = p.name;
+    if (p.source === 'local') {
+      // Bought here before: bring back this household's own choices.
+      if (p.category) document.getElementById('f-category').value = p.category;
+      document.getElementById('f-location-select').value = p.location || '';
+      document.getElementById('f-location-new').classList.add('hidden');
+      document.getElementById('f-tag-select').value = p.tag || '';
+      document.getElementById('f-tag-new').classList.add('hidden');
+      document.getElementById('f-unit').value = p.unit || '';
+      document.getElementById('f-quantity').value = p.purchase_quantity > 0 ? p.purchase_quantity : 1;
+      if (p.tracking_mode === 'fill_level') {
+        formTrackingMode = 'fill_level';
+        showFillField(100);
+      } else {
+        formTrackingMode = null;
+        document.getElementById('f-fill-wrap').classList.add('hidden');
+      }
+      setScanStatus('Bought before: ' + p.name + '.' + expiryNote, 'found');
+    } else {
+      var details = [p.brand, p.package].filter(Boolean).join(', ');
+      setScanStatus('Found on Open Food Facts: ' + p.name + (details ? ' (' + details + ')' : '')
+        + '. Check the name and fill in the rest.' + expiryNote, 'found');
+    }
+  }
+
+  function scanPhoto(file) {
+    setScanBusy(true);
+    setScanStatus('Reading barcode…');
+    apiFetch('/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': file.type || 'application/octet-stream' },
+      body: file,
+    }).then(function (result) {
+      setScanBusy(false);
+      applyLookup(result);
+    }, function (err) {
+      setScanBusy(false);
+      setScanStatus(err.message, 'error');
+    });
+  }
+
+  function lookupTyped() {
+    var value = document.getElementById('f-barcode').value.trim();
+    if (!value || value === lastLookedUp) return;
+    lastLookedUp = value;
+    setScanStatus('Looking up…');
+    apiFetch('/products/' + encodeURIComponent(value)).then(applyLookup, function (err) {
+      setScanStatus(err.message, 'error');
+    });
+  }
+
+  document.getElementById('scanBtn').addEventListener('click', function () {
+    document.getElementById('f-scan-file').click();
+  });
+  // The bottom bar's camera button: a fresh form, straight to the camera.
+  document.getElementById('scanBarBtn').addEventListener('click', function () {
+    resetItemForm();
+    openSheet();
+    document.getElementById('f-scan-file').click();
+  });
+  document.getElementById('f-scan-file').addEventListener('change', function () {
+    var file = this.files && this.files[0];
+    // Cleared so picking the same photo again still fires a change.
+    this.value = '';
+    if (file) scanPhoto(file);
+  });
+  // Enter in the barcode field (a wedge scanner always sends one) looks it
+  // up instead of submitting the form.
+  document.getElementById('f-barcode').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      lookupTyped();
+    }
+  });
+  document.getElementById('f-barcode').addEventListener('change', lookupTyped);
+
   document.getElementById('itemForm').addEventListener('submit', function (e) {
     e.preventDefault();
     // Stray spaces before/after a typed or dictated value are stripped
@@ -1360,6 +1495,7 @@
       purchase_date: document.getElementById('f-purchase').value || null,
       expiration_date: document.getElementById('f-expiration').value || null,
       notes: document.getElementById('f-notes').value.trim(),
+      barcode: document.getElementById('f-barcode').value.trim() || null,
     };
     if (!payload.name) {
       alert('Enter an item name.');

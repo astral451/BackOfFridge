@@ -2,6 +2,7 @@ const express = require('express');
 const store = require('../store');
 const { requirePermission } = require('../permissions');
 const { log } = require('../logger');
+const { interpret } = require('../barcode');
 
 const router = express.Router();
 
@@ -66,6 +67,14 @@ function trimTextFields(obj) {
   return obj;
 }
 
+// A barcode sent with an item, normalised the same way scans are ("" or
+// null clears it). Returns { value } or { error }.
+function readBarcode(raw) {
+  if (raw === null || raw === '') return { value: null };
+  const { barcode } = interpret(String(raw));
+  return barcode ? { value: barcode } : { error: 'barcode must be 8, 12, 13 or 14 digits' };
+}
+
 router.post('/', requirePermission('items:write'), (req, res) => {
   const {
     name,
@@ -80,6 +89,7 @@ router.post('/', requirePermission('items:write'), (req, res) => {
     tracking_mode = 'count',
     fill_percent = null,
     low_stock_threshold = null,
+    barcode: rawBarcode = null,
   } = trimTextFields({ ...req.body });
 
   if (!name || typeof name !== 'string') {
@@ -95,13 +105,21 @@ router.post('/', requirePermission('items:write'), (req, res) => {
     return res.status(400).json({ error: 'fill_percent must be between 0 and 100' });
   }
 
+  const parsedBarcode = readBarcode(rawBarcode);
+  if (parsedBarcode.error) return res.status(400).json({ error: parsedBarcode.error });
+
   const row = store.insertItem(req.householdId, {
     name, category, location, tag, quantity, unit, purchase_date, expiration_date, notes, tracking_mode, fill_percent, low_stock_threshold,
+    barcode: parsedBarcode.value,
   });
   store.ensureName(req.householdId, 'locations', location);
   store.ensureName(req.householdId, 'tags', tag);
+  // Buying something with a barcode teaches the app what that barcode is.
+  if (row.barcode) store.rememberProduct(req.householdId, row);
 
-  store.recordEvent(req.householdId, row.id, row.name, 'purchased', { quantity: row.quantity, unit: row.unit, location: row.location }, req.username);
+  const purchaseDetail = { quantity: row.quantity, unit: row.unit, location: row.location };
+  if (row.barcode) purchaseDetail.barcode = row.barcode;
+  store.recordEvent(req.householdId, row.id, row.name, 'purchased', purchaseDetail, req.username);
   log(`PURCHASED "${row.name}" x${row.quantity}${row.unit ? ' ' + row.unit : ''} -> ${row.location || 'unspecified location'} by ${req.username}`);
   res.status(201).json(serialize(row));
 });
@@ -112,7 +130,7 @@ router.patch('/:id', requirePermission('items:write'), (req, res) => {
 
   const fields = [
     'name', 'category', 'location', 'tag', 'quantity', 'unit', 'purchase_date', 'expiration_date',
-    'status', 'notes', 'tracking_mode', 'fill_percent', 'low_stock_threshold',
+    'status', 'notes', 'tracking_mode', 'fill_percent', 'low_stock_threshold', 'barcode',
   ];
   const updates = {};
   for (const f of fields) {
@@ -137,10 +155,17 @@ router.patch('/:id', requirePermission('items:write'), (req, res) => {
   if (updates.quantity !== undefined && !(typeof updates.quantity === 'number' && updates.quantity >= 0)) {
     return res.status(400).json({ error: 'quantity must be a number, 0 or more' });
   }
+  if (updates.barcode !== undefined) {
+    const parsed = readBarcode(updates.barcode);
+    if (parsed.error) return res.status(400).json({ error: parsed.error });
+    updates.barcode = parsed.value;
+  }
 
   const row = store.updateItem(req.householdId, { ...existing, ...updates });
   if (updates.location) store.ensureName(req.householdId, 'locations', updates.location);
   if (updates.tag) store.ensureName(req.householdId, 'tags', updates.tag);
+  // Adding a barcode to an existing item teaches it too.
+  if (updates.barcode) store.rememberProduct(req.householdId, row);
 
   const changedFields = Object.keys(updates);
   const onlyFillPercentChanged = changedFields.length === 1 && updates.fill_percent !== undefined;

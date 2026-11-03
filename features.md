@@ -384,9 +384,34 @@ priority — a Low item isn't necessarily more worth doing than a High one.
 
 - **Location customization** — shipped: locations (and tags) are a managed
   list with add/delete, each household with its own.
-- **Barcode/visual scanning (Medium)** — scan a barcode to quickly re-up an
-  item instead of retyping it (builds on "Buy again"). Its pre-filled
-  quantity depends on step 1 of "Quantity model" below.
+- **Barcode/visual scanning (Medium)** — built on branch
+  `claude/barcode-scanning`, being tested before it goes to main. Scan a
+  barcode to quickly re-up an item instead of retyping it (builds on "Buy
+  again"); its pre-filled quantity uses step 1 of "Quantity model" below.
+
+  What was built, following the design below:
+  - Camera button in the bottom bar (opens a fresh form straight to the
+    camera) and a barcode field + **Scan** button at the top of the
+    purchase form. The photo goes to `POST /api/scan` as raw image bytes
+    (`express.raw`, no `multer` needed); typed or wedge-scanner barcodes go
+    to `GET /api/products/:barcode`. Enter in the barcode field looks it up
+    instead of submitting the form.
+  - `server/src/barcode.js`: decoding (zxing-wasm reader, wasm loaded from
+    `node_modules`), HEIC detection, and normalisation: UPC-A, EAN-13 and
+    GTIN-14 all become one 13-digit key; UPC-E is expanded; GS1 Digital
+    Link QR codes and GS1 element strings (DataMatrix) give the GTIN and
+    the expiry date (AI 17), which fills in Expires.
+  - `server/src/openfoodfacts.js` + `server/src/routes/products.js`:
+    lookup order is this household's products, then Open Food Facts,
+    cached. A result found there fills the name and shows brand/package.
+    An unknown barcode, or Open Food Facts being unreachable, still keeps
+    the barcode, so the name only has to be typed once.
+  - Migration 005: `items.barcode` and the per-household `products` table.
+    Buying with a barcode (or adding one to an item through Edit) saves
+    that household's name, location, tag, unit, quantity and tracking mode
+    for it, so the next scan pre-fills all of it ("Bought before").
+  - Not built yet: the live camera viewfinder (needs HTTPS), and the
+    optional vision-model step for barcode-less items.
 
   **Direction chosen: server-side decoding, no on-device scanning library.**
   The browser only captures; the server decodes and looks up.
