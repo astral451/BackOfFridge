@@ -31,7 +31,7 @@ test('existing items get purchased_quantity from their earliest purchase event, 
   `);
 
   migrate(db);
-  assert.strictEqual(currentVersion(db), 3);
+  assert.strictEqual(currentVersion(db), MIGRATIONS.length);
   assert.deepStrictEqual(db.prepare('SELECT name, quantity, purchased_quantity FROM items ORDER BY id').all(), [
     { name: 'Coke', quantity: 3, purchased_quantity: 12 },  // bought 12, 3 left
     { name: 'Rice', quantity: 2, purchased_quantity: 2 },   // no event: best guess

@@ -109,6 +109,12 @@
     // lacks purchased_quantity.
     var bought = item.purchased_quantity > 0 ? item.purchased_quantity : item.quantity;
     document.getElementById('f-quantity').value = bought > 0 ? bought : 1;
+    // A fill-level item is bought again as a fill-level item, and a new
+    // purchase is full.
+    if (item.tracking_mode === 'fill_level') {
+      formTrackingMode = 'fill_level';
+      showFillField(100);
+    }
     document.getElementById('f-purchase').value = new Date().toISOString().slice(0, 10);
     document.getElementById('f-expiration').value = '';
     document.getElementById('f-notes').value = '';
@@ -644,11 +650,20 @@
   }
 
   // Which item (if any) the purchase sheet is currently editing, rather than
-  // logging a new purchase - null in "add" mode. editingTrackingMode tracks
-  // that item's tracking mode so submit knows whether to send quantity/unit
-  // or fill_percent (the compact form only shows one set of inputs).
+  // logging a new purchase - null in "add" mode. formTrackingMode is the
+  // tracking mode of the item being edited or bought again ('fill_level'
+  // or null for count), so submit knows to send fill_percent along with
+  // quantity/unit.
   var editingItemId = null;
-  var editingTrackingMode = null;
+  var formTrackingMode = null;
+
+  // Shows the Fill % box next to quantity/unit. A fill-level item still has
+  // a quantity - the number of units (2 jugs) - and the fill % is just the
+  // open one.
+  function showFillField(pct) {
+    document.getElementById('f-fill-wrap').classList.remove('hidden');
+    document.getElementById('f-fillpercent').value = pct;
+  }
 
   // Restores the sheet to its default "log a new purchase" mode: quantity/
   // unit visible, no fill %, title and button text reset. Does not touch
@@ -656,10 +671,8 @@
   // again) call this first so they don't inherit a stale edit target.
   function setAddMode() {
     editingItemId = null;
-    editingTrackingMode = null;
-    document.getElementById('f-quantity').classList.remove('hidden');
-    document.getElementById('f-unit').classList.remove('hidden');
-    document.getElementById('f-fillpercent').classList.add('hidden');
+    formTrackingMode = null;
+    document.getElementById('f-fill-wrap').classList.add('hidden');
     document.querySelector('#itemSheet h2').textContent = 'Log a purchase';
     document.querySelector('#itemForm .save-btn').textContent = 'Add item';
   }
@@ -686,7 +699,7 @@
   function startEdit(item) {
     openSheet();
     editingItemId = item.id;
-    editingTrackingMode = item.tracking_mode;
+    formTrackingMode = item.tracking_mode;
 
     document.getElementById('f-name').value = (item.name || '').trim();
     document.getElementById('f-category').value = item.category;
@@ -698,17 +711,12 @@
     document.getElementById('f-expiration').value = item.expiration_date || '';
     document.getElementById('f-notes').value = item.notes || '';
 
+    document.getElementById('f-quantity').value = item.quantity;
+    document.getElementById('f-unit').value = item.unit || '';
     if (item.tracking_mode === 'fill_level') {
-      document.getElementById('f-quantity').classList.add('hidden');
-      document.getElementById('f-unit').classList.add('hidden');
-      document.getElementById('f-fillpercent').classList.remove('hidden');
-      document.getElementById('f-fillpercent').value = item.fill_percent != null ? item.fill_percent : 100;
+      showFillField(item.fill_percent != null ? item.fill_percent : 100);
     } else {
-      document.getElementById('f-quantity').classList.remove('hidden');
-      document.getElementById('f-unit').classList.remove('hidden');
-      document.getElementById('f-fillpercent').classList.add('hidden');
-      document.getElementById('f-quantity').value = item.quantity;
-      document.getElementById('f-unit').value = item.unit || '';
+      document.getElementById('f-fill-wrap').classList.add('hidden');
     }
 
     document.querySelector('#itemSheet h2').textContent = 'Edit item';
@@ -720,14 +728,14 @@
 
   // Quick +/- for the common "used/added one" case, with no prompt. Count-
   // tracked items step by 1 (consume for -, a plain quantity PATCH for +);
-  // fill-level items step by 10 percentage points, and a - at or below 10%
-  // fully consumes the item instead of going negative - mirroring how
-  // reduceQuantity (server-side) floors a count-based consume at zero.
+  // fill-level items step the open unit by 10 percentage points, and a - at
+  // or below 10% finishes that unit (consumes 1): with more left, the
+  // server starts the next one at 100%; on the last one the item is used up.
   function quickAdjust(item, delta) {
     if (item.tracking_mode === 'fill_level') {
       var current = item.fill_percent != null ? item.fill_percent : 100;
       if (delta < 0 && current <= 10) {
-        apiFetch('/items/' + item.id + '/consume', { method: 'POST', body: JSON.stringify({}) })
+        apiFetch('/items/' + item.id + '/consume', { method: 'POST', body: JSON.stringify({ quantity: 1 }) })
           .then(refresh)
           .catch(function (err) { alert(err.message); });
         return;
@@ -751,6 +759,15 @@
         .then(refresh)
         .catch(function (err) { alert(err.message); });
     }
+  }
+
+  // "12 cans" for a count item. For a fill-level item, the open unit's
+  // percentage plus any full ones behind it: "40%", or "40% + 1 full".
+  function quantityLabel(item) {
+    if (item.tracking_mode !== 'fill_level') return item.quantity + (item.unit ? ' ' + item.unit : '');
+    var label = (item.fill_percent != null ? item.fill_percent : 100) + '%';
+    if (item.quantity > 1) label += ' + ' + (item.quantity - 1) + ' full';
+    return label;
   }
 
   // Builds the quantity display + -/+ stepper for an item row. Fill-level
@@ -792,9 +809,7 @@
     // truncated, while the full stepper-wrap width comfortably fits it.
     var qtyVal = document.createElement('div');
     qtyVal.className = 'qty-val';
-    qtyVal.textContent = item.tracking_mode === 'fill_level'
-      ? (item.fill_percent != null ? item.fill_percent : 100) + '%'
-      : item.quantity + (item.unit ? ' ' + item.unit : '');
+    qtyVal.textContent = quantityLabel(item);
     wrap.appendChild(qtyVal);
 
     var track = null;
@@ -834,7 +849,9 @@
   // five or ten times to catch up on consumption that wasn't logged as it
   // happened. Saved as a single `recount` event (see PATCH /items/:id).
   // Done/Enter or tapping away saves, Escape cancels; 0 marks the item
-  // consumed, the same way - does at the bottom of the range.
+  // consumed, the same way - does at the bottom of the range. For a
+  // fill-level item the number is the open unit's %, and 0 finishes just
+  // that unit.
   function startQuickSet(item, qtyVal) {
     var isFill = item.tracking_mode === 'fill_level';
     var current = isFill ? (item.fill_percent != null ? item.fill_percent : 100) : item.quantity;
@@ -880,7 +897,7 @@
       }
       finished = true;
       var request = value === 0
-        ? apiFetch('/items/' + item.id + '/consume', { method: 'POST', body: JSON.stringify({}) })
+        ? apiFetch('/items/' + item.id + '/consume', { method: 'POST', body: JSON.stringify(isFill ? { quantity: 1 } : {}) })
         : apiFetch('/items/' + item.id, {
           method: 'PATCH',
           body: JSON.stringify(isFill ? { fill_percent: value, recount: true } : { quantity: value, recount: true }),
@@ -974,7 +991,10 @@
       });
     } else {
       addAction('Track by fill level', function () {
-        var input = window.prompt('Roughly how full is "' + item.name + '" right now? (0-100%)', '100');
+        var question = item.quantity > 1
+          ? 'Roughly how full is the open "' + item.name + '" right now? The other ' + (item.quantity - 1) + ' count as full. (0-100%)'
+          : 'Roughly how full is "' + item.name + '" right now? (0-100%)';
+        var input = window.prompt(question, '100');
         if (input === null) return;
         var pct = parseFloat(input);
         if (!(pct >= 0 && pct <= 100)) {
@@ -1345,16 +1365,16 @@
       alert('Enter an item name.');
       return;
     }
-    if (editingItemId && editingTrackingMode === 'fill_level') {
+    payload.quantity = parseFloat(document.getElementById('f-quantity').value) || 1;
+    payload.unit = document.getElementById('f-unit').value.trim();
+    if (formTrackingMode === 'fill_level') {
       var pct = parseFloat(document.getElementById('f-fillpercent').value);
       if (!(pct >= 0 && pct <= 100)) {
         alert('Fill % must be between 0 and 100.');
         return;
       }
       payload.fill_percent = pct;
-    } else {
-      payload.quantity = parseFloat(document.getElementById('f-quantity').value) || 1;
-      payload.unit = document.getElementById('f-unit').value.trim();
+      if (!editingItemId) payload.tracking_mode = 'fill_level';
     }
 
     var request = editingItemId

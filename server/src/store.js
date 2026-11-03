@@ -82,15 +82,20 @@ function updateItem(householdId, item) {
   return getItem(householdId, item.id);
 }
 
-// Sets the quantity/status after a consume or throw-out, remembering the
-// previous values for a one-level undo.
-function updateItemQuantity(householdId, id, { quantity, status, prevStatus, prevQuantity, thrownOutDate }) {
+// Sets the quantity/status (and, for fill-level items, the open unit's
+// fill_percent) after a consume or throw-out, remembering the previous
+// values for a one-level undo.
+function updateItemQuantity(householdId, id, {
+  quantity, status, fillPercent, prevStatus, prevQuantity, prevFillPercent, thrownOutDate,
+}) {
   db.prepare(`
     UPDATE items SET
       quantity = @quantity,
       status = @status,
+      fill_percent = @fill_percent,
       prev_status = @prev_status,
       prev_quantity = @prev_quantity,
+      prev_fill_percent = @prev_fill_percent,
       thrown_out_date = @thrown_out_date,
       updated_at = datetime('now')
     WHERE id = @id AND household_id = @household_id
@@ -99,24 +104,36 @@ function updateItemQuantity(householdId, id, { quantity, status, prevStatus, pre
     household_id: requireHousehold(householdId),
     quantity,
     status,
+    fill_percent: fillPercent === undefined ? null : fillPercent,
     prev_status: prevStatus,
     prev_quantity: prevQuantity,
+    prev_fill_percent: prevFillPercent === undefined ? null : prevFillPercent,
     thrown_out_date: thrownOutDate,
   });
   return getItem(householdId, id);
 }
 
+// prev_fill_percent is NULL when there's no fill level to restore, in which
+// case fill_percent is left as it is.
 function undoItem(householdId, item) {
   db.prepare(`
     UPDATE items SET
       status = @prev_status,
       quantity = @prev_quantity,
+      fill_percent = COALESCE(@prev_fill_percent, fill_percent),
       prev_status = NULL,
       prev_quantity = NULL,
+      prev_fill_percent = NULL,
       thrown_out_date = CASE WHEN @prev_status = 'thrown_out' THEN thrown_out_date ELSE NULL END,
       updated_at = datetime('now')
     WHERE id = @id AND household_id = @household_id
-  `).run({ id: item.id, household_id: requireHousehold(householdId), prev_status: item.prev_status, prev_quantity: item.prev_quantity });
+  `).run({
+    id: item.id,
+    household_id: requireHousehold(householdId),
+    prev_status: item.prev_status,
+    prev_quantity: item.prev_quantity,
+    prev_fill_percent: item.prev_fill_percent === undefined ? null : item.prev_fill_percent,
+  });
   return getItem(householdId, item.id);
 }
 
