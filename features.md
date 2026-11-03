@@ -464,9 +464,8 @@ priority — a Low item isn't necessarily more worth doing than a High one.
     purchase as a count item, same as before. That carry-over belongs with
     step 2.
 
-  **Step 2 (Medium) — built on branch `claude/fill-level-per-unit`, being
-  tested before it goes to main: fill level applies to the one open unit,
-  not the whole item.** Before this, `fill_percent` and `quantity` were
+  **Step 2 (Medium) — shipped (tested on the server from its own branch
+  first): fill level applies to the one open unit, not the whole item.** Before this, `fill_percent` and `quantity` were
   independent. With two gallons of milk tracked by fill level, the `−`
   stepper's "at or below 10% fully consumes the item" rule threw away
   **both** jugs when the first one ran out, and the low-stock badge fired on
