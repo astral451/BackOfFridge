@@ -17,19 +17,38 @@ process.env.DB_PATH = path.join(dir, 'inventory.db');
 process.env.LOG_PATH = path.join(dir, 'app.log');
 
 // --- Stub Open Food Facts ------------------------------------------------
+// Answers the way the live API did when checked on 2026-11-04 (products
+// below are real responses, trimmed to the fields openfoodfacts.js asks for):
+// - found: HTTP 200, { status: 1, product }
+// - unknown product: HTTP 404, { status: 0, status_verbose: 'product not found' }
+// - a code OFF rejects outright (e.g. all zeros): HTTP 200 (not 404),
+//   { status: 0, status_verbose: 'no code or invalid code' }
+// `brands` is comma-separated with the consumer brand first.
 const offHits = [];
 let offMode = 'normal'; // 'normal' | 'down'
 const OFF_PRODUCTS = {
-  5449000000996: { product_name: 'Coca-Cola Original Taste', brands: 'Coca-Cola, The Coca-Cola Company', quantity: '330 ml', image_front_small_url: 'https://images.example/coke.jpg' },
-  '0049000028911': { product_name: 'Diet Coke', brands: 'Coca-Cola', quantity: '12 x 355 ml' },
+  5449000000996: {
+    product_name: 'Coca-Cola Original', generic_name: 'Bebida refrescante aromatizada', brands: 'COCA-COLA SERVICES SA/NV', quantity: '330 ml',
+    image_front_small_url: 'https://images.openfoodfacts.org/images/products/544/900/000/0996/front_en.1129.200.jpg',
+  },
+  '0049000028911': {
+    product_name: 'Diet Coke Soft Drink', generic_name: '', brands: 'Coke', quantity: '144 fl oz',
+    image_front_small_url: 'https://images.openfoodfacts.org/images/products/004/900/002/8911/front_en.24.200.jpg',
+  },
+  3017620422003: {
+    product_name: 'Nutella', generic_name: 'Hazelnut And Cocoa Spread', brands: 'Nutella, Ferrero', quantity: '400 g e',
+    image_front_small_url: 'https://images.openfoodfacts.org/images/products/301/762/042/2003/front_en.879.200.jpg',
+  },
 };
 const off = http.createServer((req, res) => {
   const m = req.url.match(/^\/api\/v2\/product\/(\d+)\.json/);
   offHits.push(m && m[1]);
   if (offMode === 'down') { res.writeHead(503); return res.end(); }
-  const product = m && OFF_PRODUCTS[m[1]];
-  res.writeHead(product ? 200 : 404, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify(product ? { status: 1, product } : { status: 0, status_verbose: 'product not found' }));
+  const json = (status, body) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)); };
+  if (!m || /^0+$/.test(m[1])) return json(200, { code: '', status: 0, status_verbose: 'no code or invalid code' });
+  const product = OFF_PRODUCTS[m[1]];
+  if (!product) return json(404, { code: m[1], status: 0, status_verbose: 'product not found' });
+  json(200, { code: m[1], product, status: 1, status_verbose: 'product found' });
 });
 
 let server;
@@ -128,12 +147,12 @@ test('scanning an unknown product looks it up on Open Food Facts once, then uses
   assert.strictEqual(first.body.barcode, '5449000000996');
   assert.deepStrictEqual(first.body.codes, [{ text: '5449000000996', format: 'EAN13' }]);
   assert.strictEqual(first.body.product.source, 'openfoodfacts');
-  assert.strictEqual(first.body.product.name, 'Coca-Cola Original Taste');
-  assert.strictEqual(first.body.product.brand, 'Coca-Cola');
+  assert.strictEqual(first.body.product.name, 'Coca-Cola Original');
+  assert.strictEqual(first.body.product.brand, 'COCA-COLA SERVICES SA/NV');
   assert.strictEqual(first.body.product.package, '330 ml');
 
   const again = await call('POST', '/api/scan', png);
-  assert.strictEqual(again.body.product.name, 'Coca-Cola Original Taste');
+  assert.strictEqual(again.body.product.name, 'Coca-Cola Original');
   assert.deepStrictEqual(offHits, ['5449000000996'], 'second scan is answered from the cache');
 });
 
@@ -155,7 +174,7 @@ test('buying with a barcode teaches it: the next lookup brings back this househo
   assert.deepStrictEqual(
     { ...res.body.product, image_url: undefined },
     {
-      source: 'local', name: 'Coke', brand: 'Coca-Cola', package: '330 ml', image_url: undefined,
+      source: 'local', name: 'Coke', brand: 'COCA-COLA SERVICES SA/NV', package: '330 ml', image_url: undefined,
       category: 'nonperishable', location: 'Pantry', tag: 'Drinks', unit: 'cans', purchase_quantity: 12, tracking_mode: 'count',
     }
   );
@@ -164,13 +183,24 @@ test('buying with a barcode teaches it: the next lookup brings back this househo
 test('a typed UPC-A finds the same product as the scanned EAN-13 form', async () => {
   const res = await call('GET', '/api/products/049000028911');
   assert.strictEqual(res.body.barcode, '0049000028911');
-  assert.strictEqual(res.body.product.name, 'Diet Coke');
+  assert.strictEqual(res.body.product.name, 'Diet Coke Soft Drink');
 });
 
 test('a product Open Food Facts doesn\'t know comes back empty, not as an error', async () => {
-  const res = await call('GET', '/api/products/4006381333931');
+  const res = await call('GET', '/api/products/2900000001237');
   assert.strictEqual(res.status, 200);
-  assert.deepStrictEqual([res.body.barcode, res.body.product, res.body.lookup_error], ['4006381333931', null, null]);
+  assert.deepStrictEqual([res.body.barcode, res.body.product, res.body.lookup_error], ['2900000001237', null, null]);
+});
+
+test('a code Open Food Facts rejects (HTTP 200, status 0) is also just "not found"', async () => {
+  const res = await call('GET', '/api/products/0000000000000');
+  assert.strictEqual(res.status, 200);
+  assert.deepStrictEqual([res.body.barcode, res.body.product, res.body.lookup_error], ['0000000000000', null, null]);
+});
+
+test('with several brands listed, the first (the consumer brand) is used', async () => {
+  const res = await call('GET', '/api/products/3017620422003');
+  assert.deepStrictEqual([res.body.product.name, res.body.product.brand, res.body.product.package], ['Nutella', 'Nutella', '400 g e']);
 });
 
 test('if Open Food Facts is down the barcode still comes back, with a note', async () => {
