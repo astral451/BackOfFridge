@@ -136,15 +136,17 @@ it at that platform's persistent volume for `DB_PATH` instead of a local bind mo
 Worth doing before any `git pull` + `docker compose up --build`, since new
 code can change the database schema on startup (see "Schema versions and
 migrations" below). Backing up first costs nothing and means a bad upgrade
-is always recoverable. `./restart.sh` does this automatically (stop, copy
-`data/` into `data-backups/<timestamp>`, keep the last 20, start again —
-pass `--build` to also rebuild the image after a `git pull`). Each backup
-gets a `SCHEMA_VERSION` file holding the database's schema version at the
-time (`unversioned` for a database from before versioning existed):
+is always recoverable. `./restart.sh` does this automatically, as part of
+updating (see "Updating without interrupting anyone" below): it copies
+`data/` into `data-backups/<timestamp>` while the server is stopped and
+keeps the last 20. Each backup gets a `SCHEMA_VERSION` file holding the
+database's schema version at the time (`unversioned` for a database from
+before versioning existed):
 
 ```bash
-./restart.sh          # backup + restart, no rebuild
-./restart.sh --build  # backup + rebuild + restart (after a git pull)
+./restart.sh          # check, pull, build if there's new code, back up, restart
+./restart.sh --build  # same, but always rebuild
+./restart.sh --force  # don't ask when someone is online
 ```
 
 Or do it by hand:
@@ -161,6 +163,49 @@ so a copy taken while the app is running could miss very recent writes that
 are still sitting in `inventory.db-wal` rather than the main file — copying
 the whole (stopped) `data` folder avoids that. To restore, stop the
 container, swap `data` for the backed-up folder, and start it again.
+
+### Updating without interrupting anyone
+
+`./restart.sh` is the normal update loop. In order, it:
+
+1. **Checks who's using the app** (`scripts/activity.js` in the running
+   server). If anyone has had the app open in the last 2 minutes, it names
+   them and asks before going on. With no terminal to ask in, it stops;
+   `--force` skips the question.
+2. **Pulls and builds** the new version while the old server keeps
+   running.
+3. **Stops the server, backs up `data/`, and starts the new version.** That
+   part is the only downtime, usually a few seconds.
+
+To check activity yourself at any time:
+
+```bash
+docker compose exec backoffridge node scripts/activity.js
+```
+
+```
+Online now (active in the last 2 minutes): sam (40 s ago)
+Last activity:
+  sam   40 s ago     (2026-11-05 14:02 UTC)
+  root  3 h ago      (2026-11-05 11:10 UTC)
+```
+
+The admin page shows the same under "Who's online". Every signed-in request
+counts as activity. An open page also sends a small heartbeat every 60 s
+while it's visible on screen, so an app that's open but idle still shows
+up. A locked phone stops sending it. The times are kept in
+`data/activity.json` (usernames and times only).
+
+**What people see during an update.** Just before stopping the server,
+`restart.sh` creates `data/MAINTENANCE`, which makes the server answer API
+calls with "being updated". Any open page that can't reach the server shows
+*"Server is being updated. Expected back in about a minute."* with a timer,
+and checks back every 5 seconds. When the server is back, the page reloads
+itself to get the new version. If someone was in the middle of an entry,
+nothing is lost: the form stays as it was, they're told to save it again,
+and the page doesn't reload under them. The app never resends a change by
+itself, since that could save it twice. Opening the site fresh while the
+server is down still shows Cloudflare's own error page.
 
 ### Schema versions and migrations
 
@@ -326,9 +371,12 @@ Every API request logs an `ACCESS` (or `ACCESS DENIED` for a bad/missing key)
 line with the method, path, requester IP, and who made it, with their
 household (`as alice (household 1)`), and purchases additionally log a
 friendlier `PURCHASED "name" x<qty> <unit> -> <location>` line. Each line is
-written both to stdout and to a local file, `<DB volume>/app.log` (so under
-Docker that's inside your `./data` bind mount, right next to `inventory.db` —
-same persistence, no extra volume needed).
+written both to stdout and to `app.log`. Under Docker, `docker-compose.yml`
+sets `LOG_PATH=/data/app.log`, so it's in your `./data` bind mount right
+next to `inventory.db` and survives rebuilds. (Before that setting, the file
+lived inside the container and was lost on every rebuild.) The pages'
+60-second heartbeat (`POST /api/ping`) isn't logged, so it doesn't drown
+out real activity.
 
 To watch it live: `docker compose logs -f` (handy to leave running in a
 `screen` session on the server). To read the persisted file directly:
@@ -369,7 +417,10 @@ for ids that don't exist.
 | GET | `/api/household` | Your household: `{ name, inviteCode, members }` |
 | POST | `/api/household/invite-code` | Replace your household's invite code |
 | PATCH | `/api/household` | Rename your household. Body `{ name }` |
-| | `/api/admin/*` | Admin only (households, new-household codes, pending approvals); see `server/src/routes/admin.js` |
+| POST | `/api/ping` | Heartbeat the pages send every 60 s while visible; any signed-in user. 204, and marks the user as active (not logged) |
+| | `/api/admin/*` | Admin only (households, new-household codes, pending approvals, who's online: `GET /api/admin/activity`); see `server/src/routes/admin.js` |
+
+While `data/MAINTENANCE` exists (during an update), every `/api/*` call answers `503 { error, maintenance: true }`.
 
 This API is intentionally the integration point for the voice-logging idea: a Claude
 Code skill or connector can call these same endpoints once you decide how you want to

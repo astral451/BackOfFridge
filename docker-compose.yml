@@ -7,6 +7,9 @@ services:
     environment:
       PORT: 3000
       DB_PATH: /data/inventory.db
+      # In the data volume, so the log survives rebuilds (inside the image it
+      # was lost on every ./restart.sh --build).
+      LOG_PATH: /data/app.log
     volumes:
       - ./data:/data
 

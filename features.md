@@ -597,6 +597,60 @@ priority — a Low item isn't necessarily more worth doing than a High one.
   production backup, so the real app stays up and real data stays
   untouched while a feature is tested on the phone. Scoped in
   `staging_plan.md`; not built yet.
+- **Update safety: who's online, and a "being updated" screen (Low)** —
+  built on branch `claude/update-safety`, being tested before it goes to
+  main. As the app moves to real use, updates should wait for a quiet
+  moment, and anyone caught mid-update should see a clear message, not an
+  error.
+  - **Who's online.** `server/src/activity.js` records each user's last
+    signed-in request in memory. It writes them to `data/activity.json`
+    (usernames and times only) a few seconds after a change and on
+    shutdown.
+    - Open pages send a heartbeat (`POST /api/ping`) every 60 s while
+      visible, so an idle open app counts. Heartbeats aren't logged.
+    - "Online" = seen in the last 2 minutes.
+    - `scripts/activity.js` prints it and exits 3 when someone is online.
+      It reads the file, not the database.
+    - The admin page has a "Who's online" section
+      (`GET /api/admin/activity`).
+  - **`restart.sh` reordered** to cut downtime from the whole build to a
+    few seconds: local-changes check → activity check (asks if someone
+    is online; stops if there's no terminal; `--force` skips) → pull →
+    build while the old server runs → create `data/MAINTENANCE` → stop
+    → back up → `docker compose up -d`.
+    - It now stops only the app service, so the Cloudflare tunnel stays
+      connected.
+    - The main steps are in one `{ ... }` block, so `git pull` changing
+      the script mid-run can't garble it.
+  - **Maintenance switch.** While `data/MAINTENANCE` exists, `/api/*`
+    answers `503 { maintenance: true }`. The server removes the file when
+    it starts, and `restart.sh` removes it on exit. The server also
+    handles SIGTERM, which saves the activity file and exits at once.
+    Before, Docker waited 10 s and then killed it.
+  - **The notice** (`public/connection.js`, loaded before each signed-in
+    page's own script).
+    - It wraps `fetch`: a network error, 502/503/504, or Cloudflare
+      52x/530 on an API call shows "Server is being updated. Expected
+      back in about a minute." with a timer, or "You're offline" when the
+      phone has no connection.
+    - The failed call never settles, so pages don't show their error
+      alerts.
+    - It checks `/api/auth/me` every 5 s. Once the server is back it
+      reloads the page to get the new code. If a change didn't get
+      through, or a form is open, it says "Back online", keeps the form,
+      and leaves the reload to the user. It never resends a change.
+  - **Log kept across rebuilds:** `LOG_PATH=/data/app.log` in
+    `docker-compose.yml`. The README said the log was in `./data`, but
+    without that setting it was inside the container.
+  - Tested: `server/test/activity.test.js`. Also checked:
+    - Playwright at 390px against a real server stopped and restarted
+      under the page. A failed save keeps the form and saves once on
+      retry; an idle page reloads by itself; the maintenance flag shows
+      the notice.
+    - `restart.sh` run against a stand-in `docker` command: someone
+      online, `--force`, new code, an old server without the check, the
+      server stopped, local changes, and the pull changing the script
+      itself.
 - **Archive a household (Low/Medium)** — not built; the user wants it
   for later. Today a household can't be removed or archived. Plan:
   migration 003 adds `households.archived_at`. An archived household's

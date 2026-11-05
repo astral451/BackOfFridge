@@ -632,3 +632,25 @@ body:has(.bottombar) { padding-bottom: 84px; } /* room for the fixed bottom bar 
 .member-row select { max-width: 150px; padding: 4px 6px; }
 .user-row { flex-direction: column; align-items: flex-start; gap: 6px; }
 .user-row .admin-controls select { max-width: 150px; padding: 4px 6px; }
+
+/* ---------- "Server is being updated" notice (connection.js) ---------- */
+.conn-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px; background: rgba(20, 16, 10, 0.55);
+}
+.conn-overlay[hidden] { display: none; }
+.conn-card {
+  width: 100%; max-width: 360px; box-sizing: border-box;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: 14px;
+  padding: 20px; box-shadow: 0 10px 30px var(--shadow);
+}
+.conn-card h2 { margin: 0 0 8px; font-size: 1.15rem; }
+.conn-card p { margin: 0 0 8px; line-height: 1.4; }
+.conn-card .conn-detail { color: var(--muted); font-size: 0.85rem; margin-bottom: 0; }
+.conn-actions { display: flex; gap: 8px; margin-top: 14px; align-items: center; }
+.conn-primary {
+  background: var(--accent); color: var(--accent-ink); border: none;
+  border-radius: 9px; padding: 10px 16px; font-weight: 700; cursor: pointer;
+}

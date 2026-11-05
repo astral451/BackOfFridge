@@ -26,6 +26,13 @@
 
   <main id="app">
     <section class="settings-section">
+      <h2>Who's online</h2>
+      <p class="settings-desc">Check this before updating the server. "Online" means the app was open on someone's screen in the last 2 minutes. <code>restart.sh</code> checks the same thing and asks before updating.</p>
+      <p id="activityOnline"></p>
+      <div id="activityList"></div>
+    </section>
+
+    <section class="settings-section">
       <h2>Waiting for approval <span id="pendingCount" class="stats"></span></h2>
       <p class="settings-desc">People who signed up without an invite code. Approve each into a household, or reject them.</p>
       <div id="pendingList"></div>
@@ -48,6 +55,7 @@
     </section>
   </main>
 
+  <script src="connection.js"></script>
   <script src="admin.js"></script>
 </body>
 </html>

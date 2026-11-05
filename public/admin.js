@@ -213,6 +213,33 @@
     return row;
   }
 
+  function ago(seconds) {
+    if (seconds < 60) return seconds + ' s ago';
+    var minutes = Math.round(seconds / 60);
+    if (minutes < 60) return minutes + ' min ago';
+    var hours = Math.round(minutes / 60);
+    if (hours < 48) return hours + ' h ago';
+    return Math.round(hours / 24) + ' days ago';
+  }
+
+  var me = null;
+
+  // Who's online now, and when everyone was last active.
+  function renderActivity(a) {
+    var others = a.online.filter(function (p) { return p.username !== me.username; });
+    document.getElementById('activityOnline').textContent = others.length
+      ? 'Online now: ' + others.map(function (p) { return p.username; }).join(', ') + '.'
+      : 'Nobody else is online now. A good time to update.';
+    var list = document.getElementById('activityList');
+    list.textContent = '';
+    a.people.forEach(function (p) {
+      var row = el('div', 'manage-row');
+      row.appendChild(el('span', null, p.username + (p.username === me.username ? ' (you)' : '')));
+      row.appendChild(el('span', 'stats', ago(p.secondsAgo)));
+      list.appendChild(row);
+    });
+  }
+
   function refresh() {
     return apiFetch('/admin/households').then(function (list) {
       households = list;
@@ -221,7 +248,8 @@
     }).then(function (results) {
       renderPending(results[0]);
       renderCodes(results[1]);
-    }).catch(fail);
+      return apiFetch('/admin/activity');
+    }).then(renderActivity).catch(fail);
   }
 
   document.getElementById('logoutBtn').addEventListener('click', function () {
@@ -234,7 +262,8 @@
       return null;
     }
     return res.json();
-  }).then(function (me) {
+  }).then(function (user) {
+    me = user;
     if (!me) return;
     if (!me.isAdmin) {
       window.location.href = me.status === 'pending' ? 'pending.html' : 'index.html';

@@ -1,26 +1,50 @@
 #!/usr/bin/env bash
-# Restarts the BackOfFridge container: backs up the database, pulls the
-# latest code, and rebuilds if anything actually changed.
+# Updates and restarts the BackOfFridge server: checks nobody is using the
+# app, pulls the latest code, builds it while the old server keeps running,
+# then stops it, backs up the database and starts the new version. Downtime
+# is just the stop, backup and start: usually a few seconds.
 #
 # Usage:
-#   ./restart.sh          # stop, back up, git pull, start (rebuilding
-#                          # automatically if the pull brought in new code)
-#   ./restart.sh --build  # same, but always rebuild even if the pull was
-#                          # a no-op (e.g. you changed something else, like
-#                          # a Dockerfile base image, without a new commit)
+#   ./restart.sh            # check, pull, build if the pull brought new code,
+#                           # stop, back up, start
+#   ./restart.sh --build    # same, but always rebuild even if the pull was
+#                           # a no-op (e.g. you changed something else, like
+#                           # a Dockerfile base image, without a new commit)
+#   ./restart.sh --force    # don't ask when someone is online
+#
+# Before anything else it runs scripts/activity.js in the running server.
+# If someone has had the app open in the last 2 minutes it names them and
+# asks whether to go ahead (or stops, when there's no terminal to ask in).
+#
+# Just before stopping, it creates data/MAINTENANCE: the server then answers
+# API calls with "being updated", and open pages show that notice until the
+# new server is up (public/connection.js). The new server removes the file
+# when it starts, and so does this script when it exits.
 #
 # The backup is a stopped-container copy of the whole ./data folder (not
 # just inventory.db) - the database runs in WAL mode, so recent writes can
 # still be sitting in inventory.db-wal rather than the main file, and
 # copying only the .db file while it's running could miss them. This
 # mirrors the manual recipe in the README's "Backing up before pulling an
-# update" section.
+# update" section. The schema version it records is the database's, from
+# before the new code has run against it.
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
 BACKUP_ROOT="data-backups"
 KEEP=20
+SERVICE="backoffridge"
+
+FORCE=0
+BUILD=0
+for arg in "$@"; do
+  case "$arg" in
+    --build) BUILD=1 ;;
+    --force) FORCE=1 ;;
+    *) echo "Unknown option: $arg (use --build and/or --force)" >&2; exit 1 ;;
+  esac
+done
 
 # Prints the schema version recorded in data/inventory.db: the highest
 # applied migration, "unversioned" for a database from before versioning
@@ -48,8 +72,75 @@ read_schema_version() {
   fi
 }
 
-echo "Stopping container..."
-docker compose stop
+# Asks the running server who's online. Exit code 3 from activity.js means
+# someone is. An older server without the script, or a stopped one, is no
+# reason to block the update.
+check_activity() {
+  if [ -z "$(docker compose ps -q --status running "$SERVICE" 2>/dev/null)" ]; then
+    echo "Server isn't running - skipping the activity check."
+    return 0
+  fi
+  echo "Checking who's using the app..."
+  local status=0
+  docker compose exec -T "$SERVICE" node scripts/activity.js || status=$?
+  if [ "$status" = 0 ]; then
+    return 0
+  elif [ "$status" != 3 ]; then
+    echo "(Couldn't check activity - the running version may be too old to have it. Continuing.)"
+    return 0
+  fi
+  if [ "$FORCE" = 1 ]; then
+    echo "--force: updating anyway."
+    return 0
+  fi
+  if [ -t 0 ]; then
+    local answer
+    read -r -p "Someone is using the app right now. Update anyway? [y/N] " answer
+    case "$answer" in
+      y|Y|yes|YES) return 0 ;;
+    esac
+  fi
+  echo "Not updating. Try again in a few minutes, or run with --force." >&2
+  exit 1
+}
+
+# Everything below is one { ... } block ending in exit: bash reads the whole
+# block before running it, so the git pull replacing this file mid-run can't
+# change what's executed.
+{
+if [ -n "$(git status --porcelain)" ]; then
+  echo "Local changes in the repo - not updating." >&2
+  echo "Commit, stash, or discard them first, then re-run." >&2
+  exit 1
+fi
+
+check_activity
+
+echo "Pulling latest code..."
+before=$(git rev-parse HEAD)
+git pull
+after=$(git rev-parse HEAD)
+
+if [ "$before" != "$after" ]; then
+  echo "Code changed ($before -> $after)."
+  BUILD=1
+else
+  echo "Already up to date."
+fi
+
+if [ "$BUILD" = 1 ]; then
+  echo "Building the new version (the current server keeps running meanwhile)..."
+  docker compose build "$SERVICE"
+fi
+
+if [ -d data ]; then
+  trap 'rm -f data/MAINTENANCE' EXIT
+  touch data/MAINTENANCE 2>/dev/null \
+    || echo "(Couldn't create data/MAINTENANCE - open pages will still notice once the server stops.)"
+fi
+
+echo "Stopping server..."
+docker compose stop "$SERVICE"
 
 if [ ! -d data ]; then
   echo "No ./data folder found yet - nothing to back up (first run?)."
@@ -61,6 +152,7 @@ else
 
   echo "Backing up data/ -> $dest (schema version: $SCHEMA_VERSION)"
   cp -r data "$dest"
+  rm -f "$dest/MAINTENANCE"
   echo "$SCHEMA_VERSION" > "$dest/SCHEMA_VERSION"
 
   # Keep only the most recent $KEEP backups so this doesn't grow unbounded
@@ -68,30 +160,9 @@ else
   ls -1dt "$BACKUP_ROOT"/*/ 2>/dev/null | tail -n +$((KEEP + 1)) | xargs -r rm -rf
 fi
 
-echo "Pulling latest code..."
-if [ -n "$(git status --porcelain)" ]; then
-  echo "Local changes in the repo - not pulling automatically." >&2
-  echo "Commit, stash, or discard them first, then re-run." >&2
-  exit 1
-fi
-before=$(git rev-parse HEAD)
-git pull
-after=$(git rev-parse HEAD)
-
-if [ "$before" != "$after" ]; then
-  echo "Code changed ($before -> $after)."
-  rebuild=1
-else
-  echo "Already up to date."
-  rebuild=0
-fi
-
-if [ "${1:-}" = "--build" ] || [ "$rebuild" = "1" ]; then
-  echo "Rebuilding and starting..."
-  docker compose up -d --build
-else
-  echo "Starting..."
-  docker compose start
-fi
+echo "Starting..."
+docker compose up -d
 
 echo "Done."
+exit 0
+}

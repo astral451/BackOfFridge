@@ -9,6 +9,7 @@ const db = require('../db');
 const auth = require('../auth');
 const households = require('../households');
 const { log } = require('../logger');
+const activity = require('../activity');
 
 const router = express.Router();
 
@@ -25,6 +26,13 @@ router.get('/summary', (req, res) => {
     pendingCount: pendingUsers().length,
     householdCount: db.prepare('SELECT COUNT(*) AS n FROM households').get().n,
   });
+});
+
+// GET /api/admin/activity - who's online now (seen in the last 2 minutes)
+// and when each person was last active, so the admin can pick a quiet
+// moment to update. Same data as scripts/activity.js.
+router.get('/activity', (req, res) => {
+  res.json(activity.summary());
 });
 
 // --- Households ----------------------------------------------------------
