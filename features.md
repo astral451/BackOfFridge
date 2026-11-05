@@ -410,6 +410,38 @@ priority — a Low item isn't necessarily more worth doing than a High one.
     Buying with a barcode (or adding one to an item through Edit) saves
     that household's name, location, tag, unit, quantity and tracking mode
     for it, so the next scan pre-fills all of it ("Bought before").
+  - **Linking earlier names to a barcode** (added after the first round
+    of testing on the server). A household that typed or dictated
+    "Melon medley waterloon" before scanning got "Sparkling Water Melon
+    Medley" from Open Food Facts on the first scan, with no link between
+    them.
+    - When a lookup's product came from Open Food Facts, it also returns
+      `matches`: this household's barcode-less names that look alike
+      (`server/src/namematch.js`). Up to 3 are returned; one per name,
+      ignoring case.
+    - The match compares words: lowercase, punctuation and filler words
+      dropped, plural "s" trimmed. Words also match when one starts with
+      the other and the shorter has 4+ letters, so a misheard "waterloon"
+      meets "water". It scores shared / all distinct words, and also
+      tries brand + name. Suggested at a score of 0.4 or more.
+    - The form asks *Same as your "..."?* **Yes, use my name** calls
+      `POST /api/products/:barcode/link { name }`. That gives the barcode
+      to every item of that name (any status, so history counts too),
+      records an `edited` event on each, and saves the latest one's
+      choices as the barcode's local product. The form then fills like a
+      "Bought before" scan. **No** just hides the question. Nothing is
+      renamed or linked without a yes.
+  - **Product identity, for sorting and counting** (e.g. a future "what
+    we buy most"): within a household, the barcode, when an item has one,
+    is the product's identity, whatever each item is called. Items
+    without one (not scanned yet, or nothing to scan, like
+    farmers-market fruit) are identified by name, ignoring case and
+    surrounding spaces. In SQL: group by
+    `COALESCE(barcode, 'name:' || LOWER(TRIM(name)))`. Linking is what
+    keeps earlier dictated entries in the same group as later scans.
+    - Caveat: one product in two package sizes has two barcodes (a
+      single can and a 12-pack). If they should count together, link both
+      to the same name and group by the products table's name instead.
   - Not built yet: the live camera viewfinder (needs HTTPS), and the
     optional vision-model step for barcode-less items.
 

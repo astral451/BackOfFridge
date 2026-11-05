@@ -35,6 +35,12 @@ const OFF_PRODUCTS = {
     product_name: 'Diet Coke Soft Drink', generic_name: '', brands: 'Coke', quantity: '144 fl oz',
     image_front_small_url: 'https://images.openfoodfacts.org/images/products/004/900/002/8911/front_en.24.200.jpg',
   },
+  // Made up (shaped like the real ones), for name matching against a
+  // dictated "Melon medley waterloon".
+  '0012000999917': {
+    product_name: 'Sparkling Water Melon Medley', generic_name: '', brands: 'Fizzwell', quantity: '12 x 12 fl oz',
+    image_front_small_url: '',
+  },
   3017620422003: {
     product_name: 'Nutella', generic_name: 'Hazelnut And Cocoa Spread', brands: 'Nutella, Ferrero', quantity: '400 g e',
     image_front_small_url: 'https://images.openfoodfacts.org/images/products/301/762/042/2003/front_en.879.200.jpg',
@@ -243,4 +249,67 @@ test('bad input gets a clear answer', async () => {
   assert.strictEqual((await call('POST', '/api/scan', heic)).status, 415);
   assert.strictEqual((await call('GET', '/api/products/12345')).status, 400);
   assert.strictEqual((await call('POST', '/api/items', { name: 'X', barcode: 'abc' })).status, 400);
+});
+
+// --- Linking a barcode to names entered before scanning ---------------------
+
+test('name matching: a misheard dictation still meets the product name; unrelated names don\'t', () => {
+  const { score, bestMatches } = require('../src/namematch');
+  const off = 'Sparkling Water Melon Medley';
+  assert.ok(score('Melon medley waterloon', off) >= 0.7);
+  assert.ok(score('Chicken breast', 'Boneless Skinless Chicken Breast') >= 0.4);
+  assert.strictEqual(score('Granola bars', off), 0);
+  assert.ok(score('Coke', 'Diet Coke Soft Drink') < 0.4, 'one shared word out of four is not enough');
+  // The brand counts too: people say "LaCroix melon".
+  assert.deepStrictEqual(bestMatches('Melon Medley', 'LaCroix', [{ name: 'LaCroix melon' }, { name: 'Milk' }]).map((m) => m.name), ['LaCroix melon']);
+});
+
+test('scanning a new product suggests earlier barcode-less items with a similar name', async () => {
+  for (const [name, date] of [['Melon medley waterloon', '2026-10-01'], ['melon MEDLEY waterloon ', '2026-10-20'], ['Granola bars', '2026-10-21']]) {
+    const r = await call('POST', '/api/items', { name, purchase_date: date, location: 'Garage Fridge', unit: 'cans', quantity: 12 });
+    assert.strictEqual(r.status, 201, JSON.stringify(r.body));
+  }
+  await call('POST', '/api/items', { name: 'Melon medley waterloon', purchase_date: '2026-10-25', location: 'Pantry' }, { 'x-test-household': '2' });
+
+  const res = await call('GET', '/api/products/0012000999917');
+  assert.strictEqual(res.body.product.source, 'openfoodfacts');
+  assert.deepStrictEqual(res.body.matches.map((m) => [m.name.trim().toLowerCase(), m.count]), [['melon medley waterloon', 2]],
+    'one suggestion per name, ignoring case and spaces, and only from this household');
+  assert.strictEqual(res.body.matches[0].last_bought, '2026-10-20');
+});
+
+test('"yes, that\'s my ..." links the barcode: earlier items get it, and it pre-fills their choices from then on', async () => {
+  const other = await call('POST', '/api/products/0012000999917/link', { name: 'MELON medley waterloon' }, { 'x-test-household': '2' });
+  assert.strictEqual(other.status, 200, 'household 2 links its own item');
+  assert.strictEqual(other.body.linked, 1);
+
+  const res = await call('POST', '/api/products/0012000999917/link', { name: 'Melon medley waterloon' });
+  assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+  assert.strictEqual(res.body.linked, 2);
+  assert.strictEqual(res.body.barcode, '0012000999917');
+  assert.deepStrictEqual(res.body.matches, []);
+  const p = res.body.product;
+  assert.deepStrictEqual([p.source, p.name.trim(), p.location, p.unit, p.purchase_quantity], ['local', 'melon MEDLEY waterloon', 'Garage Fridge', 'cans', 12],
+    'the most recent of them is what the barcode fills in');
+
+  const linked = db.prepare("SELECT id, household_id FROM items WHERE barcode = '0012000999917' ORDER BY id").all();
+  assert.deepStrictEqual(linked.map((r) => r.household_id), [1, 1, 2]);
+  const events = db.prepare("SELECT item_id, detail FROM item_events WHERE event_type = 'edited' AND detail LIKE '%0012000999917%'").all();
+  assert.strictEqual(events.length, 3, 'each linked item records the change in its history');
+
+  const again = await call('GET', '/api/products/0012000999917');
+  assert.strictEqual(again.body.product.source, 'local');
+  assert.deepStrictEqual(again.body.matches, [], 'linked: no more suggestions');
+
+  const granola = db.prepare("SELECT barcode FROM items WHERE name = 'Granola bars'").get();
+  assert.strictEqual(granola.barcode, null, 'other names are untouched');
+});
+
+test('linking needs a real barcode and a name this household has without one', async () => {
+  assert.strictEqual((await call('POST', '/api/products/12345/link', { name: 'Granola bars' })).status, 400);
+  assert.strictEqual((await call('POST', '/api/products/3017620422003/link', {})).status, 400);
+  assert.strictEqual((await call('POST', '/api/products/3017620422003/link', { name: 'Nothing like it' })).status, 404);
+  assert.strictEqual((await call('POST', '/api/products/3017620422003/link', { name: 'Granola bars' }, { 'x-test-household': '2' })).status, 404,
+    "another household's names can't be linked");
+  assert.strictEqual(db.prepare("SELECT barcode FROM items WHERE name = 'Granola bars'").get().barcode, null);
 });

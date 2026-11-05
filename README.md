@@ -270,6 +270,21 @@ New ones are looked up on [Open Food Facts](https://world.openfoodfacts.org)
 Without it, scanning still works; you just type the name of a new product once.
 `OFF_BASE_URL` overrides the lookup host (the tests use it).
 
+**Items entered before you scanned them.** When Open Food Facts names a new
+barcode ("Sparkling Water Melon Medley") and you've entered something
+similar without a barcode ("Melon medley waterloon", maybe dictated), the
+form asks *Same as your "Melon medley waterloon"?* Answering **Yes, use my
+name** gives this barcode to every earlier item with that name. It also
+fills the form with your name, location, unit and quantity from the latest
+one, and scanning the barcode brings those back from then on. **No, it's
+new** just hides the question. Matching compares words, so it allows for
+word order, plurals and a misheard word. It only ever suggests: nothing is
+renamed or linked unless you say yes.
+
+Once linked, the barcode is how the app knows a product, whatever each
+item was called. Items without one (never scanned, or nothing to scan,
+like farmers-market fruit) are known by their name.
+
 ### Reaching it from your phone / Supernote away from home
 
 The container only listens on the port you expose; it doesn't set up remote access.
@@ -376,7 +391,8 @@ for ids that don't exist.
 | GET | `/api/items/:id/history` | This item's recorded events (purchased, consumed, thrown_out, edited, fill_level_set, undo, deleted), newest first |
 | DELETE | `/api/items/:id` | Remove an item |
 | POST | `/api/scan` | Read the barcode in a photo. Body: the raw image bytes (JPEG/PNG; any image `Content-Type`, up to 25MB). Returns `{ barcode, expiration_date, codes, product, lookup_error }` (see `server/src/routes/products.js`). 422 if no barcode is found, 415 for a HEIC photo |
-| GET | `/api/products/:barcode` | Same answer for a typed barcode (8, 12, 13 or 14 digits). Looks in this household's own products first, then Open Food Facts (cached) |
+| GET | `/api/products/:barcode` | Same answer for a typed barcode (8, 12, 13 or 14 digits). Looks in this household's own products first, then Open Food Facts (cached). Both also return `matches`: for a product only Open Food Facts knows, up to 3 names this household entered without a barcode that look similar, `[{ name, count, last_bought }]` |
+| POST | `/api/products/:barcode/link` | "Same as my ...": body `{ name }`. Gives the barcode to this household's items with that name (ignoring case) that have none, and makes the latest one what the barcode pre-fills. Same answer shape, plus `linked` (how many items). 404 if no such name |
 | GET | `/api/locations` | Managed location names, for the purchase form/filter dropdowns |
 | GET | `/api/locations/detail` | Locations with a count of items currently referencing each, for the manage-locations page |
 | POST | `/api/locations` | Add a new location. Body `{ name }` |

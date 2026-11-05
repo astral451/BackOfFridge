@@ -1364,11 +1364,65 @@
   // the user taps Add.
   var lastLookedUp = null;
 
+  // A new status replaces any "same as your ...?" question too.
   function setScanStatus(text, kind) {
     var el = document.getElementById('scanStatus');
     el.textContent = text;
     el.className = 'scan-status full' + (kind ? ' ' + kind : '');
     el.hidden = !text;
+    showMatches(null);
+  }
+
+  // After a scan Open Food Facts knew but this household hasn't linked yet:
+  // "Same as your ...?" for earlier items entered without a barcode whose
+  // names look alike. Yes links the barcode to them (their items get it, and
+  // their name, location and so on fill the form); No just hides this.
+  function showMatches(result) {
+    var box = document.getElementById('scanMatch');
+    box.textContent = '';
+    var matches = (result && result.matches) || [];
+    box.hidden = !matches.length;
+    if (!matches.length) return;
+
+    var one = matches.length === 1;
+    var q = document.createElement('p');
+    q.className = 'scan-match-q';
+    q.textContent = one ? 'Same as your "' + matches[0].name + '"?' : 'Same as one of yours?';
+    box.appendChild(q);
+
+    var row = document.createElement('div');
+    row.className = 'scan-match-actions';
+    matches.forEach(function (m) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'small scan-match-yes';
+      b.textContent = one ? 'Yes, use my name' : m.name;
+      b.addEventListener('click', function () { linkToName(result.barcode, m.name); });
+      row.appendChild(b);
+    });
+    var no = document.createElement('button');
+    no.type = 'button';
+    no.className = 'small';
+    no.textContent = one ? 'No, it\'s new' : 'None of these';
+    no.addEventListener('click', function () { showMatches(null); });
+    row.appendChild(no);
+    box.appendChild(row);
+  }
+
+  function linkToName(code, name) {
+    var buttons = document.querySelectorAll('#scanMatch button');
+    Array.prototype.forEach.call(buttons, function (b) { b.disabled = true; });
+    apiFetch('/products/' + encodeURIComponent(code) + '/link', {
+      method: 'POST',
+      body: JSON.stringify({ name: name }),
+    }).then(function (result) {
+      applyLookup(result);
+      setScanStatus('Linked to your "' + name + '"'
+        + (result.linked > 1 ? ' (' + result.linked + ' earlier items)' : '')
+        + '. Scanning it fills in your name from now on.', 'found');
+    }, function (err) {
+      setScanStatus(err.message, 'error');
+    });
   }
 
   function setScanBusy(busy) {
@@ -1429,6 +1483,7 @@
       var details = [p.brand, p.package].filter(Boolean).join(', ');
       setScanStatus('Found on Open Food Facts: ' + p.name + (details ? ' (' + details + ')' : '')
         + '. Check the name and fill in the rest.' + expiryNote, 'found');
+      showMatches(result);
     }
   }
 

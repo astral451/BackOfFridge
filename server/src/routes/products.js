@@ -4,9 +4,10 @@
 //   POST /api/scan               body: a photo (raw image bytes, any image
 //                                Content-Type) -> reads the barcode in it
 //   GET  /api/products/:barcode  a typed or wedge-scanner barcode
+//   POST /api/products/:barcode/link  { name }: "yes, this is my <name>"
 //
-// Both answer with the same shape:
-//   { barcode, expiration_date, codes: [{ text, format }], product, lookup_error }
+// All three answer with the same shape:
+//   { barcode, expiration_date, codes: [{ text, format }], product, lookup_error, matches }
 // - barcode: the normalised product number (13-digit EAN form, or 8), or
 //   null when the code isn't a product number (e.g. a website QR code).
 // - expiration_date: only from 2D GS1 codes that carry one, else null.
@@ -17,13 +18,25 @@
 // - lookup_error: set when Open Food Facts couldn't be reached; the
 //   barcode is still returned so the user can type the name.
 //
+// - matches: when the product came from Open Food Facts (this household
+//   hasn't linked the barcode to anything yet), names it entered earlier
+//   without a barcode that look like the same thing:
+//   [{ name, count, last_bought }], best first, at most 3. Empty otherwise.
+//   The page asks "same as your ...?"; yes calls /link.
+// - linked (only from /link): how many earlier items got the barcode.
+//
 // Lookup order: this household's products table, then Open Food Facts
 // (cached into products on success).
+//
+// Once linked, the barcode is the product's identity in this household:
+// every item with it is the same product, whatever it was called. Items
+// without one (never scanned, or nothing to scan) are identified by name.
 
 const express = require('express');
 const store = require('../store');
 const barcode = require('../barcode');
 const openfoodfacts = require('../openfoodfacts');
+const namematch = require('../namematch');
 const { requirePermission } = require('../permissions');
 const { log } = require('../logger');
 
@@ -49,7 +62,14 @@ function productView(row) {
   };
 }
 
-async function findProduct(householdId, code) {
+// Earlier barcode-less names that look like this Open Food Facts product.
+function suggestMatches(householdId, product) {
+  if (!product || product.source !== 'openfoodfacts') return [];
+  return namematch.bestMatches(product.name, product.brand, store.unlinkedNames(householdId))
+    .map(({ name, count, last_bought }) => ({ name, count, last_bought }));
+}
+
+async function lookupProduct(householdId, code) {
   const known = store.getProduct(householdId, code);
   if (known) return { product: productView(known), lookup_error: null };
   try {
@@ -60,6 +80,11 @@ async function findProduct(householdId, code) {
     log(`OPEN FOOD FACTS LOOKUP FAILED for ${code}: ${err.message}`);
     return { product: null, lookup_error: 'Open Food Facts could not be reached' };
   }
+}
+
+async function findProduct(householdId, code) {
+  const result = await lookupProduct(householdId, code);
+  return { ...result, matches: suggestMatches(householdId, result.product) };
 }
 
 router.post(
@@ -90,7 +115,7 @@ router.post(
     const read = codes.map((c) => barcode.interpret(c.text, c.format));
     const i = Math.max(0, read.findIndex((r) => r.barcode));
     const { barcode: code, expiration_date } = read[i];
-    const lookup = code ? await findProduct(req.householdId, code) : { product: null, lookup_error: null };
+    const lookup = code ? await findProduct(req.householdId, code) : { product: null, lookup_error: null, matches: [] };
     log(`SCANNED ${codes.map((c) => `${c.format} ${c.text}`).join(', ')} by ${req.username}${lookup.product ? ` -> "${lookup.product.name}" (${lookup.product.source})` : ''}`);
     res.json({ barcode: code, expiration_date, codes, ...lookup });
   }
@@ -103,6 +128,23 @@ router.get('/products/:barcode', requirePermission('items:write'), async (req, r
   }
   const lookup = await findProduct(req.householdId, code);
   res.json({ barcode: code, expiration_date, codes: [], ...lookup });
+});
+
+// "Yes, this is my <name>": the barcode joins the items entered under that
+// name without one, and their latest choices (name, location, unit...)
+// become what this barcode pre-fills, as if it had been bought with it.
+router.post('/products/:barcode/link', requirePermission('items:write'), (req, res) => {
+  const { barcode: code } = barcode.interpret(req.params.barcode);
+  if (!code) return res.status(400).json({ error: 'A barcode is 8, 12, 13 or 14 digits.' });
+  const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
+  if (!name) return res.status(400).json({ error: 'name is required' });
+  const result = store.linkBarcodeToName(req.householdId, code, name, req.username);
+  if (!result) return res.status(404).json({ error: `Nothing called "${name}" without a barcode.` });
+  log(`LINKED barcode ${code} to "${name}" (${result.linked} item${result.linked === 1 ? '' : 's'}) by ${req.username}`);
+  res.json({
+    barcode: code, expiration_date: null, codes: [],
+    product: productView(result.product), lookup_error: null, matches: [], linked: result.linked,
+  });
 });
 
 module.exports = router;

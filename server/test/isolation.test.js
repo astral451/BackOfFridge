@@ -239,6 +239,7 @@ const HOUSEHOLD_ENDPOINTS = [
   ['get', '/api/items'],
   ['get', '/api/items/1'],
   ['get', '/api/products/5449000000996'],
+  ['post', '/api/products/5449000000996/link', { name: 'X' }],
   ['post', '/api/scan', {}],
   ['get', '/api/items/1/history'],
   ['post', '/api/items', { name: 'X' }],

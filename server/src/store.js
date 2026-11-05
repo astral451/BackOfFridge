@@ -217,6 +217,43 @@ function rememberProduct(householdId, item) {
   return getProduct(householdId, item.barcode);
 }
 
+// Names this household has entered without a barcode (typed or dictated
+// before scanning existed, or never scanned): one row per name, ignoring
+// case, with how many items carry it and when it was last bought. Used to
+// suggest "is this the same as your ...?" when a new barcode is scanned.
+function unlinkedNames(householdId) {
+  return db.prepare(`
+    SELECT MAX(name) AS name, COUNT(*) AS count, MAX(purchase_date) AS last_bought
+    FROM items
+    WHERE household_id = ? AND barcode IS NULL AND TRIM(name) != ''
+    GROUP BY LOWER(TRIM(name))
+  `).all(requireHousehold(householdId));
+}
+
+// Links a barcode to items entered under `name` without one: every such
+// item of this household (any status, so history counts too) gets the
+// barcode, and the most recent one becomes the product this barcode
+// pre-fills from now on. Returns { linked, product }, or null when no item
+// has that name.
+function linkBarcodeToName(householdId, barcode, name, username) {
+  const hid = requireHousehold(householdId);
+  const items = db.prepare(`
+    SELECT * FROM items
+    WHERE household_id = ? AND barcode IS NULL AND LOWER(TRIM(name)) = LOWER(TRIM(?))
+    ORDER BY COALESCE(purchase_date, created_at) DESC, id DESC
+  `).all(hid, name);
+  if (!items.length) return null;
+  const setBarcode = db.prepare('UPDATE items SET barcode = ? WHERE id = ? AND household_id = ?');
+  db.transaction(() => {
+    for (const item of items) {
+      setBarcode.run(barcode, item.id, hid);
+      recordEvent(hid, item.id, item.name, 'edited', { barcode }, username);
+    }
+    rememberProduct(hid, { ...items[0], barcode });
+  })();
+  return { linked: items.length, product: getProduct(hid, barcode) };
+}
+
 // --- Locations and tags --------------------------------------------------
 // Both are managed lists with the same shape: (household_id, name), names
 // case-insensitive within a household. `kind` picks the table and the
@@ -288,6 +325,8 @@ module.exports = {
   getProduct,
   cacheProductLookup,
   rememberProduct,
+  unlinkedNames,
+  linkBarcodeToName,
   itemStats,
   recordEvent,
   itemHistory,
