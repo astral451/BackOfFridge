@@ -1126,3 +1126,40 @@ body:has(.bottombar) { padding-bottom: 84px; } /* room for the fixed bottom bar 
   border: none; background: none; color: inherit; font-size: 1rem; cursor: pointer;
 }
 .trip-row.is-new { border: 2px solid var(--accent); background: var(--surface-2); }
+
+/* ---------- a past trip (trip.html) ---------- */
+a.trip-row { text-decoration: none; }
+.row-chevron { flex: 0 0 auto; color: var(--muted); font-size: 1.3rem; line-height: 1; }
+.missed-box {
+  background: var(--warn-bg);
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.missed-box .trip-subhead { color: var(--warn-text); }
+.missed-names { margin: 0; font-size: 0.92rem; }
+.missed-btn {
+  align-self: flex-start;
+  min-height: 40px; padding: 0 14px;
+  border: none; border-radius: 10px;
+  background: var(--warn-text); color: var(--warn-bg);
+  font: inherit; font-size: 0.9rem; font-weight: 600; cursor: pointer;
+}
+.missed-btn:disabled { opacity: 0.85; cursor: default; }
+.past-got { gap: 0; }
+.past-got-main { display: flex; flex-direction: column; gap: 2px; color: inherit; text-decoration: none; }
+.same-as {
+  margin-top: 8px;
+  padding: 8px 6px 8px 10px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  display: flex; align-items: center; gap: 6px;
+}
+.same-as-q { flex: 1; font-size: 0.85rem; }
+.same-as-yes, .same-as-no {
+  flex: 0 0 auto; min-height: 36px; padding: 0 10px;
+  border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text);
+  font: inherit; font-size: 0.82rem; font-weight: 600; cursor: pointer;
+}
+.same-as-yes { border-color: var(--accent); color: var(--accent); }

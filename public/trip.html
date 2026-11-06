@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<script>
+// See index.html for why this runs inline, before the stylesheet.
+(function () {
+  try {
+    var t = localStorage.getItem('theme');
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+  } catch (e) {}
+})();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BackOfFridge - Trip</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1 id="tripTitle">Trip</h1>
+    <a href="lists.html">&larr; Lists</a>
+    <span id="whoami" class="stats"></span>
+    <button id="logoutBtn" class="small">Log out</button>
+  </header>
+
+  <main id="app" class="list-page">
+    <p id="tripMeta" class="section-hint"></p>
+
+    <!-- List rows never got: back onto the shopping list, on a tap. -->
+    <section id="missedBox" class="missed-box" aria-labelledby="missedHeading" hidden>
+      <h3 id="missedHeading" class="trip-subhead"></h3>
+      <p id="missedNames" class="missed-names"></p>
+      <button type="button" id="carryBtn" class="missed-btn"></button>
+    </section>
+
+    <section class="card-section" aria-labelledby="gotHeading">
+      <h3 id="gotHeading" class="trip-subhead"></h3>
+      <ol id="gotList" class="trip-list" reversed></ol>
+    </section>
+  </main>
+
+  <script src="trip.js"></script>
+</body>
+</html>

@@ -254,6 +254,52 @@ function linkBarcodeToName(householdId, barcode, name, username) {
   return { linked: items.length, product: getProduct(hid, barcode) };
 }
 
+// Every name this household has used for an item (any status, ignoring
+// case), for "Same as your ...?" after a trip.
+function allNames(householdId) {
+  return db.prepare(`
+    SELECT MAX(name) AS name, COUNT(*) AS count, MIN(created_at) AS first_at
+    FROM items WHERE household_id = ? AND TRIM(name) != ''
+    GROUP BY LOWER(TRIM(name))
+  `).all(requireHousehold(householdId));
+}
+
+// "Same as your 2% milk": the item (and any other bought under the same
+// barcode with its old name) takes the household's name, and the barcode
+// is taught that name, so the next scan fills it in. Items already under
+// that name without a barcode get the barcode too, so it's one product.
+// Returns { renamed, linked }.
+function renameToExisting(householdId, item, name, username) {
+  const hid = requireHousehold(householdId);
+  return db.transaction(() => {
+    const targets = item.barcode
+      ? db.prepare(`
+          SELECT * FROM items WHERE household_id = ?
+            AND (id = ? OR (barcode = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))))
+        `).all(hid, item.id, item.barcode, item.name)
+      : [item];
+    const rename = db.prepare("UPDATE items SET name = ?, updated_at = datetime('now') WHERE id = ? AND household_id = ?");
+    for (const t of targets) {
+      rename.run(name, t.id, hid);
+      recordEvent(hid, t.id, name, 'edited', { name, was: t.name }, username);
+    }
+    let linked = 0;
+    if (item.barcode) {
+      const same = db.prepare(`
+        SELECT * FROM items WHERE household_id = ? AND barcode IS NULL AND LOWER(TRIM(name)) = LOWER(TRIM(?))
+      `).all(hid, name);
+      const setBarcode = db.prepare('UPDATE items SET barcode = ? WHERE id = ? AND household_id = ?');
+      for (const t of same) {
+        setBarcode.run(item.barcode, t.id, hid);
+        recordEvent(hid, t.id, t.name, 'edited', { barcode: item.barcode }, username);
+      }
+      linked = same.length;
+      rememberProduct(hid, { ...getItem(hid, item.id) });
+    }
+    return { renamed: targets.length, linked };
+  })();
+}
+
 // --- Locations and tags --------------------------------------------------
 // Both are managed lists with the same shape: (household_id, name), names
 // case-insensitive within a household. `kind` picks the table and the
@@ -314,6 +360,8 @@ function deleteName(householdId, kind, name) {
 }
 
 module.exports = {
+  allNames,
+  renameToExisting,
   requireHousehold,
   listItems,
   getItem,

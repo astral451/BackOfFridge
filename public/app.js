@@ -2500,9 +2500,15 @@
   loadWhoAmI();
   refresh();
   loadCurrentTrip().catch(function () {});
-  // "Start shopping" on the shopping list lands here.
+  // "Start shopping" on the shopping list lands here (#trip); a row on a
+  // past trip opens that item's Edit (#edit=<id>).
+  var editMatch = window.location.hash.match(/^#edit=(\d+)$/);
   if (window.location.hash === '#trip') {
     history.replaceState(null, '', window.location.pathname);
     showTripView();
+  } else if (editMatch) {
+    history.replaceState(null, '', window.location.pathname);
+    apiFetch('/items/' + editMatch[1]).then(function (item) { startEdit(item); })
+      .catch(function (err) { alert(err.message); });
   }
 })();

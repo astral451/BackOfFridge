@@ -131,7 +131,8 @@
 
   function pastRow(t) {
     var li = el('li');
-    var row = el('div', 'trip-row static past-row');
+    var row = el('a', 'trip-row past-row');
+    row.href = 'trip.html?id=' + encodeURIComponent(t.id);
     var textBox = el('div', 'past-text');
     var start = serverTime(t.started_at || t.created_at);
     var end = serverTime(t.ended_at);
@@ -143,6 +144,7 @@
     textBox.appendChild(el('span', 'trip-detail', parts.join(' · ')));
     row.appendChild(textBox);
     if (t.todo) row.appendChild(el('span', 'tag-warn', t.todo + ' not found'));
+    row.appendChild(el('span', 'row-chevron', '›'));
     li.appendChild(row);
     return li;
   }

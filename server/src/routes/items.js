@@ -129,6 +129,20 @@ router.post('/', requirePermission('items:write'), (req, res) => {
   res.status(201).json(body);
 });
 
+// POST /api/items/:id/same-as - body { name }: "Same as your 2% milk?
+// Yes". The item takes a name the household already uses; see
+// store.renameToExisting.
+router.post('/:id/same-as', requirePermission('items:write'), (req, res) => {
+  const existing = store.getItem(req.householdId, req.params.id);
+  if (!existing) return res.status(404).json({ error: 'not found' });
+  const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
+  const known = store.allNames(req.householdId).find((n) => n.name.trim().toLowerCase() === name.toLowerCase());
+  if (!name || !known) return res.status(400).json({ error: 'name must be one this household already uses' });
+  const result = store.renameToExisting(req.householdId, existing, known.name, req.username);
+  log(`RENAMED "${existing.name}" -> "${known.name}" (${result.renamed} item(s), ${result.linked} linked) by ${req.username}`);
+  res.json({ ...result, item: serialize(store.getItem(req.householdId, existing.id)) });
+});
+
 router.patch('/:id', requirePermission('items:write'), (req, res) => {
   const existing = store.getItem(req.householdId, req.params.id);
   if (!existing) return res.status(404).json({ error: 'not found' });

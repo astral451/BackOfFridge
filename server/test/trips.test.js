@@ -320,3 +320,50 @@ test('past trips come newest first, 20 at a time', async () => {
   db.prepare("INSERT INTO trips (id, household_id, status, started_at) VALUES ('empty', 4, 'done', datetime('now'))").run();
   assert.ok(!(await overview()).body.past.some((t) => t.id === 'empty'));
 });
+
+// --- A past trip (household 5) -----------------------------------------
+
+const H5 = { 'x-test-household': '5' };
+
+test('a past trip: not found goes back on the list; "Same as your ...?"', async () => {
+  db.prepare("INSERT INTO households (id, name, invite_code) VALUES (5, 'Fifth', 'ABCDEFG2')").run();
+  // Bought before, under the household's own name and no barcode.
+  const old = (await call('POST', '/api/items', { name: '2% milk', quantity: 1, unit: 'gal' }, H5)).body;
+  db.prepare("UPDATE items SET created_at = datetime('now', '-10 days') WHERE id = ?").run(old.id);
+
+  // A trip from a list: Bread and Bananas never found; a scan saved as "Milk 2%".
+  await call('POST', '/api/trips/list/entries', { name: 'Bread' }, H5);
+  await call('POST', '/api/trips/list/entries', { name: 'Bananas', quantity: 6 }, H5);
+  const list = (await call('GET', '/api/trips/list', undefined, H5)).body.list;
+  await call('POST', `/api/trips/${list.id}/start`, {}, H5);
+  const scanned = (await buy('Milk 2%', { barcode: '0041192100147' }, H5)).body;
+  await buy('Jam', {}, H5);
+  await call('POST', `/api/trips/${list.id}/end`, {}, H5);
+
+  const view = (await call('GET', `/api/trips/${list.id}`, undefined, H5)).body.trip;
+  assert.strictEqual(view.status, 'done');
+  const byName = Object.fromEntries(view.entries.map((e) => [e.name, e]));
+  assert.strictEqual(byName['Milk 2%'].same_as, '2% milk');
+  assert.strictEqual(byName.Jam.same_as, null);
+  assert.strictEqual(byName.Bread.bought_at, null);
+  assert.strictEqual((await call('GET', `/api/trips/${list.id}`)).status, 404); // another household
+
+  // Not found -> the shopping list, once.
+  const carry = await call('POST', `/api/trips/${list.id}/carry-over`, {}, H5);
+  assert.deepStrictEqual(carry.body, { added: 2, already: 0 });
+  assert.deepStrictEqual((await call('POST', `/api/trips/${list.id}/carry-over`, {}, H5)).body, { added: 0, already: 2 });
+  const next = (await call('GET', '/api/trips/list', undefined, H5)).body.list;
+  assert.deepStrictEqual(next.entries.map((e) => [e.name, e.quantity]).sort(), [['Bananas', 6], ['Bread', null]]);
+
+  // "Yes, rename": the item takes the name, the old one gets the barcode,
+  // and scanning the barcode now fills in "2% milk".
+  assert.strictEqual((await call('POST', `/api/items/${scanned.id}/same-as`, { name: 'Nope' }, H5)).status, 400);
+  const r = await call('POST', `/api/items/${scanned.id}/same-as`, { name: '2% MILK' }, H5);
+  assert.strictEqual(r.status, 200);
+  assert.deepStrictEqual([r.body.renamed, r.body.linked, r.body.item.name], [1, 1, '2% milk']);
+  assert.strictEqual(db.prepare('SELECT barcode FROM items WHERE id = ?').get(old.id).barcode, '0041192100147');
+  assert.strictEqual(db.prepare("SELECT name FROM products WHERE household_id = 5 AND barcode = '0041192100147'").get().name, '2% milk');
+  const after = (await call('GET', `/api/trips/${list.id}`, undefined, H5)).body.trip;
+  const milk = after.entries.find((e) => e.item_id === scanned.id);
+  assert.deepStrictEqual([milk.name, milk.same_as], ['2% milk', null]);
+});

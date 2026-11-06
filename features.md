@@ -762,6 +762,23 @@ priority — a Low item isn't necessarily more worth doing than a High one.
   reload neither loses nor repeats a notice. Only while the page is
   open: no push notifications to a locked phone.
 
+  **Lists page step 3 built (2026-11-06): a past trip.** Past trip rows
+  on the Lists page open `trip.html?id=…` (`trip.js`): date, time span,
+  who; **Not found (N)** with "Put them on the shopping list" (`POST
+  /api/trips/:id/carry-over`, only on that tap, not twice); **Got (N)**,
+  numbered, newest first, each opening the item's Edit on the main page
+  (`index.html#edit=<id>`). A row bought under a name close to one the
+  household already used (namematch, names in use before it was bought)
+  asks **"Same as your "2% milk"? Yes, rename / No"**. Yes (`POST
+  /api/items/:id/same-as`, `store.renameToExisting`) renames it and any
+  item bought under the same barcode with the old name, gives the
+  barcode to the household's items under that name, and teaches the
+  barcode the name, so the next scan fills it in. No is remembered on
+  the phone (`sameAsNo`). `GET /api/trips/:id` carries `same_as` per
+  row. The page is the Lists page's "trips" view: future (the list),
+  now, and past are all on Lists; this is one past trip opened up.
+  The scan buttons now show a barcode icon instead of a camera.
+
   **The Lists page (designed 2026-11-06).** Mockups: the second
   row of https://claude.ai/artifact/JPGBHKB7F1ujrPWv6KbgpK. One place
   to see every list, rather than only reaching them by adding or

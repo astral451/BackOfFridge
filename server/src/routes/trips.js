@@ -3,6 +3,7 @@ const db = require('../db');
 const store = require('../store');
 const trips = require('../trips');
 const { serialize } = require('./items');
+const namematch = require('../namematch');
 const { requirePermission } = require('../permissions');
 const { log } = require('../logger');
 
@@ -177,6 +178,43 @@ router.post('/entries/:id/tick', requirePermission('items:write'), (req, res) =>
   if (!entry) return res.status(404).json({ error: 'not found' });
   trips.setTicked(req.householdId, entry.id, req.body.ticked !== false);
   res.json(trips.getEntry(req.householdId, entry.id));
+});
+
+// GET /api/trips/:id - one trip (a past one, from the Lists page). Each
+// row bought under a name the household doesn't use, but close to one it
+// already did, carries `same_as`: that name, for "Same as your ...?".
+router.get('/:id', (req, res) => {
+  const trip = trips.getTrip(req.householdId, req.params.id);
+  if (!trip) return res.status(404).json({ error: 'not found' });
+  const view = trips.tripView(req.householdId, trip);
+  const names = store.allNames(req.householdId);
+  for (const e of view.entries) {
+    e.same_as = null;
+    if (e.item_id == null || e.deleted || !e.bought_at) continue;
+    const own = e.name.trim().toLowerCase();
+    // Names in use before this was bought, other than its own.
+    const candidates = names.filter((n) => n.name.trim().toLowerCase() !== own && n.first_at < e.bought_at);
+    const best = namematch.bestMatches(e.name, null, candidates)[0];
+    if (best) e.same_as = best.name;
+  }
+  res.json({ trip: view });
+});
+
+// POST /api/trips/:id/carry-over - "Put them on the shopping list": the
+// trip's rows never got go onto the list (not twice). { added, already }.
+router.post('/:id/carry-over', requirePermission('items:write'), (req, res) => {
+  const trip = trips.getTrip(req.householdId, req.params.id);
+  if (!trip) return res.status(404).json({ error: 'not found' });
+  const missed = trips.tripView(req.householdId, trip).entries.filter((e) => !e.bought_at);
+  let added = 0;
+  for (const e of missed) {
+    const r = trips.addToList(req.householdId, {
+      name: e.name, barcode: e.barcode, quantity: e.quantity, unit: e.unit, source: 'manual',
+    }, req.username);
+    if (r.added) added += 1;
+  }
+  log(`CARRIED OVER ${added} from trip ${trip.id} to the shopping list by ${req.username} (household ${req.householdId})`);
+  res.json({ added, already: missed.length - added });
 });
 
 // POST /api/trips/:id/start - "Start shopping" on the list.
