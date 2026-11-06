@@ -45,8 +45,15 @@ const router = express.Router();
 // Phone photos are a few MB; 25MB leaves room for a full-resolution shot.
 const MAX_UPLOAD = '25mb';
 
+// For a product only Open Food Facts knows, unit and purchase_quantity are
+// read from its package text, so the form's Qty and Unit fill in too. (The
+// household's own products carry the ones it chose.)
 function productView(row) {
   if (!row) return null;
+  if (row.source === 'openfoodfacts') {
+    const { count, size } = openfoodfacts.parsePackage(row.package);
+    row = { ...row, unit: size || null, purchase_quantity: count };
+  }
   return {
     source: row.source,
     name: row.name,

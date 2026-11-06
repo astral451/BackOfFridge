@@ -313,3 +313,35 @@ test('linking needs a real barcode and a name this household has without one', a
     "another household's names can't be linked");
   assert.strictEqual(db.prepare("SELECT barcode FROM items WHERE name = 'Granola bars'").get().barcode, null);
 });
+
+// --- Package size into Qty and Unit -----------------------------------------
+
+test("Open Food Facts' package size becomes Unit (size of each) and Qty (how many)", () => {
+  const { parsePackage } = require('../src/openfoodfacts');
+  const cases = {
+    '330 ml': [null, '330 ml'],
+    '144 fl oz': [null, '144 fl oz'],
+    '400 g e': [null, '400 g'],            // the EU "estimated" sign
+    '18 oz (510 g)': [null, '18 oz'],      // the same size again in grams
+    '18.5 oz.': [null, '18.5 oz'],
+    '12 x 12 fl oz': [12, '12 fl oz'],
+    '6 x 330ml': [6, '330 ml'],
+    '1,5 l': [null, '1.5 l'],
+    '1.5 l / 50.7 fl oz': [null, '1.5 l'],
+    '12 cans': [12, 'cans'],
+    '12 pack': [12, ''],
+    'about a pound': [null, ''],
+    '': [null, ''],
+  };
+  for (const [text, [count, size]] of Object.entries(cases)) {
+    assert.deepStrictEqual(parsePackage(text), { count, size }, text);
+  }
+});
+
+test('a lookup answered by Open Food Facts carries the parsed unit and count', async () => {
+  const coke = (await call('GET', '/api/products/0049000028911')).body.product;
+  assert.deepStrictEqual([coke.source, coke.package, coke.unit, coke.purchase_quantity], ['openfoodfacts', '144 fl oz', '144 fl oz', null]);
+  const melon = (await call('GET', '/api/products/0012000999917', undefined, { 'x-test-household': '1' })).body.product;
+  assert.strictEqual(melon.source, 'local', 'linked earlier: the household\'s own unit wins');
+  assert.deepStrictEqual([melon.unit, melon.purchase_quantity], ['cans', 12]);
+});

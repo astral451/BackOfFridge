@@ -431,6 +431,20 @@ priority — a Low item isn't necessarily more worth doing than a High one.
       choices as the barcode's local product. The form then fills like a
       "Bought before" scan. **No** just hides the question. Nothing is
       renamed or linked without a yes.
+  - **Package size into Qty and Unit** (also from testing on the server:
+    the status line showed the size but the form didn't use it).
+    `parsePackage` in `server/src/openfoodfacts.js` reads Open Food
+    Facts' free-text `quantity` the way quick add treats "two, 24 ounces":
+    Unit = the size of each, Qty = how many when the pack says so.
+    - `330 ml` → Unit 330 ml; `12 x 12 fl oz` → Qty 12, Unit 12 fl oz.
+    - `18 oz (510 g)` → 18 oz; `400 g e` → 400 g (the EU estimated
+      sign); `12 cans` → Qty 12, Unit cans.
+    - Text without a number gives nothing.
+    - It's applied in `productView` for Open Food Facts rows, so
+      products cached before this change get it too.
+    - The form only fills Unit when it's empty, and Qty when it's still
+      1. A product the household has bought before keeps its own unit
+      and quantity.
   - **Product identity, for sorting and counting** (e.g. a future "what
     we buy most"): within a household, the barcode, when an item has one,
     is the product's identity, whatever each item is called. Items

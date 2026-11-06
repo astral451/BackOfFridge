@@ -1480,6 +1480,13 @@
       }
       setScanStatus('Bought before: ' + p.name + '.' + expiryNote, 'found');
     } else {
+      // Open Food Facts' package size, read by the server: Unit is the size
+      // of each ("330 ml"), Qty how many when the pack says ("12 x ...").
+      // Only fills what hasn't been typed in.
+      var unitInput = document.getElementById('f-unit');
+      var qtyInput = document.getElementById('f-quantity');
+      if (p.unit && !unitInput.value.trim()) unitInput.value = p.unit;
+      if (p.purchase_quantity > 1 && (qtyInput.value === '' || qtyInput.value === '1')) qtyInput.value = p.purchase_quantity;
       var details = [p.brand, p.package].filter(Boolean).join(', ');
       setScanStatus('Found on Open Food Facts: ' + p.name + (details ? ' (' + details + ')' : '')
         + '. Check the name and fill in the rest.' + expiryNote, 'found');
