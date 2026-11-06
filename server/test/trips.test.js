@@ -247,3 +247,74 @@ test('Start shopping while a trip is already going joins the list to it', async 
   assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM trips WHERE id = ?').get(l.id).n, 0);
   assert.strictEqual((await list()).body.list, null);
 });
+
+// --- The Lists page (household 4, from a clean slate) -----------------
+
+const H4 = { 'x-test-household': '4' };
+const overview = (q = '') => call('GET', '/api/trips' + q, undefined, H4);
+
+test('the Lists overview: nothing yet', async () => {
+  db.prepare("INSERT INTO households (id, name, invite_code) VALUES (4, 'Fourth', 'TUVWXYZ2')").run();
+  assert.deepStrictEqual((await overview()).body, { active: null, planned: null, past: [], more: false });
+});
+
+test('the Lists overview: shopping now, the list, past trips', async () => {
+  // A trip from the list: 2 listed, 1 got by saving, 1 left; plus 1 off-list.
+  await call('POST', '/api/trips/list/entries', { name: 'Bread' }, H4);
+  await call('POST', '/api/trips/list/entries', { name: 'Milk', quantity: 2, unit: 'gal' }, H4);
+  const list = (await call('GET', '/api/trips/list', undefined, H4)).body.list;
+  await call('POST', `/api/trips/${list.id}/start`, {}, H4);
+  await buy('milk', {}, { ...H4, 'x-test-user': 'alex' });
+  await buy('Jam', {}, H4);
+  // Someone at home adds to it; adding it twice doesn't duplicate.
+  const add = await call('POST', `/api/trips/${list.id}/entries`, { name: 'Coffee' }, { ...H4, 'x-test-user': 'kim' });
+  assert.strictEqual(add.status, 201);
+  assert.strictEqual(add.body.added, true);
+  assert.strictEqual(add.body.added_by, 'kim');
+  assert.strictEqual((await call('POST', `/api/trips/${list.id}/entries`, { name: 'coffee' }, H4)).body.added, false);
+  // And a new list for next time.
+  await call('POST', '/api/trips/list/entries', { name: 'Rice' }, H4);
+
+  let o = (await overview()).body;
+  assert.strictEqual(o.active.id, list.id);
+  assert.deepStrictEqual(
+    [o.active.got, o.active.ticked, o.active.todo, o.active.listed, o.active.listed_got],
+    [2, 0, 2, 3, 1],
+  );
+  assert.deepStrictEqual(o.active.people, ['alex', 'sam']);
+  assert.deepStrictEqual(o.active.waiting.map((w) => w.name), ['Coffee', 'Bread']);
+  assert.strictEqual(o.planned.todo, 1);
+  assert.deepStrictEqual(o.planned.waiting.map((w) => w.name), ['Rice']);
+  assert.deepStrictEqual(o.past, []);
+
+  // Ending it: it's past, with 2 not found; it can't be added to now.
+  await call('POST', `/api/trips/${list.id}/end`, {}, H4);
+  assert.strictEqual((await call('POST', `/api/trips/${list.id}/entries`, { name: 'Late' }, H4)).status, 404);
+  o = (await overview()).body;
+  assert.strictEqual(o.active, null);
+  assert.strictEqual(o.past.length, 1);
+  assert.strictEqual(o.past[0].id, list.id);
+  assert.strictEqual(o.past[0].todo, 2);
+  // Not another household's.
+  assert.strictEqual((await call('POST', `/api/trips/${o.planned.id}/entries`, { name: 'X' })).status, 404);
+});
+
+test('past trips come newest first, 20 at a time', async () => {
+  const ids = [];
+  for (let i = 0; i < 22; i++) {
+    const t = (await buy('Thing ' + i, {}, H4)).body.trip;
+    await call('POST', `/api/trips/${t.id}/end`, {}, H4);
+    db.prepare("UPDATE trips SET started_at = datetime('now', ?) WHERE id = ?").run(`-${i + 1} days`, t.id);
+    ids.push(t.id);
+  }
+  const first = (await overview()).body;
+  assert.strictEqual(first.past.length, 20);
+  assert.strictEqual(first.more, true);
+  const last = first.past[first.past.length - 1];
+  const next = (await overview('?before=' + encodeURIComponent(last.started_at))).body;
+  assert.strictEqual(next.more, false);
+  assert.strictEqual(first.past.length + next.past.length, 23);
+  // Empty trips (nothing on them) aren't listed.
+  db.prepare("INSERT INTO trips (id, household_id, status, started_at) VALUES ('empty', 4, 'done', datetime('now'))").run();
+  assert.ok(!(await overview()).body.past.some((t) => t.id === 'empty'));
+});

@@ -250,6 +250,8 @@ const HOUSEHOLD_ENDPOINTS = [
   ['del', '/api/items/1'],
   ['get', '/api/trips/current'],
   ['get', '/api/trips/list'],
+  ['get', '/api/trips'],
+  ['post', '/api/trips/00000000-0000-4000-8000-000000000000/entries', { name: 'X' }],
   ['post', '/api/trips/list/entries', { name: 'X' }],
   ['patch', '/api/trips/entries/1', { quantity: 1 }],
   ['del', '/api/trips/entries/1'],

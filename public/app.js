@@ -40,6 +40,8 @@
     });
   }
 
+  var myName = null;
+
   function loadWhoAmI() {
     fetch('/api/auth/me').then(function (res) {
       if (!res.ok) {
@@ -49,7 +51,9 @@
       return res.json();
     }).then(function (me) {
       if (!me || redirectIfNoHousehold(me)) return;
+      myName = me.username;
       document.getElementById('whoami').textContent = 'Signed in as ' + me.username;
+      renderShoppingNow();
     });
   }
 
@@ -1353,6 +1357,7 @@
       applyFiltersAndRender();
     });
     apiFetch('/stats').then(renderStats);
+    loadCurrentTrip().catch(function () {});
     apiFetch('/locations').then(renderLocations);
     apiFetch('/tags').then(renderTags);
   }
@@ -1660,16 +1665,48 @@
     el.textContent = 'Trip: ' + n + ' saved' + (todo ? ' · ' + todo + ' to get' : '');
     el.hidden = !n && !todo;
   }
+  // The main page's "Shopping now" banner, for everyone in the household
+  // while a trip is going: "8 saved · 3 still to get · with alex".
+  function renderShoppingNow() {
+    var banner = document.getElementById('shoppingNow');
+    var t = currentTrip;
+    banner.hidden = !t;
+    if (!t) return;
+    var parts = [t.count + ' saved'];
+    if (t.todo) parts.push(t.todo + ' still to get');
+    var others = (t.people || []).filter(function (p) { return p !== myName; });
+    if (others.length) parts.push((t.people.indexOf(myName) !== -1 ? 'with ' : 'by ') + others.join(', '));
+    document.getElementById('shoppingNowSub').textContent = parts.join(' · ');
+  }
+  document.getElementById('shoppingNow').addEventListener('click', function () { showTripView(); });
+  // Someone else may start or end a trip: check when the page comes back
+  // into view, and every 30 s while it's showing.
+  var TRIP_CHECK_MS = 30000;
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) loadCurrentTrip().catch(function () {});
+  });
+  setInterval(function () {
+    if (!document.hidden) loadCurrentTrip().catch(function () {});
+  }, TRIP_CHECK_MS);
+
   // Reads the household's current trip (someone else may have added to
   // it, or ended it). Resolves with the full trip, or null.
   function loadCurrentTrip() {
     return apiFetch('/trips/current').then(function (r) {
+      var people = [];
+      if (r.trip) {
+        r.trip.entries.forEach(function (e) {
+          if (e.bought_at && e.added_by && people.indexOf(e.added_by) === -1) people.push(e.added_by);
+        });
+      }
       currentTrip = r.trip ? {
         id: r.trip.id,
         count: r.trip.count,
         todo: r.trip.entries.filter(function (e) { return !e.bought_at; }).length,
+        people: people,
       } : null;
       renderTripCount();
+      renderShoppingNow();
       return r.trip;
     });
   }

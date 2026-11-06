@@ -733,7 +733,19 @@ priority — a Low item isn't necessarily more worth doing than a High one.
     Not yet: the near-match question ("Is this the 2% milk on your
     list?"); name suggestions while typing on the list.
 
-  **Next: the Lists page (designed 2026-11-06).** Mockups: the second
+  **Lists page step 1 built (2026-11-06):** `lists.html` / `lists.js`
+  ("Lists" in the main header; `list.html` now goes back to it). Shopping
+  now card (started, who, progress through the list, still to get, the
+  "Forgot something?" box, Open trip / End trip), Shopping list card
+  (count, first six, suggestions waiting, Open list / Start shopping),
+  Past trips (20 at a time, "Show older trips"; rows not yet tappable).
+  The page re-reads every 15 s. The main page's Shopping now banner
+  (re-checked every 30 s and on returning to the page) opens the trip.
+  Server: `GET /api/trips` (`trips.overview`), `POST
+  /api/trips/:id/entries` (`trips.addToTrip`; refused once a trip is
+  over).
+
+  **The Lists page (designed 2026-11-06).** Mockups: the second
   row of https://claude.ai/artifact/JPGBHKB7F1ujrPWv6KbgpK. One place
   to see every list, rather than only reaching them by adding or
   scanning.

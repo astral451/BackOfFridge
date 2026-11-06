@@ -168,6 +168,12 @@ const addToList = db.transaction((householdId, { name, barcode = null, quantity 
       .run(id, householdId, username || null);
     trip = getTrip(householdId, id);
   }
+  return addEntry(householdId, trip, { name, barcode, quantity, unit, source }, username);
+});
+
+// Adds a row not got yet to `trip` (the list, or the trip going now),
+// unless that product is already waiting on it. Returns { entry, added }.
+function addEntry(householdId, trip, { name, barcode = null, quantity = null, unit = '', source = 'manual' }, username) {
   const existing = findListed(trip.id, { name, barcode });
   if (existing) return { entry: existing, added: false };
   const result = db.prepare(`
@@ -175,7 +181,75 @@ const addToList = db.transaction((householdId, { name, barcode = null, quantity 
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).run(trip.id, householdId, name, barcode, quantity, unit || '', SOURCES.includes(source) ? source : 'manual', username || null);
   return { entry: getEntry(householdId, result.lastInsertRowid), added: true };
+}
+
+// "Forgot something?": someone at home adds to the trip going now (or to
+// the list). Not to a trip that's over. Returns null if it can't be.
+const addToTrip = db.transaction((householdId, tripId, fields, username) => {
+  endIdleTrips(householdId);
+  const trip = getTrip(householdId, tripId);
+  if (!trip || trip.status === 'done') return null;
+  return addEntry(householdId, trip, fields, username);
 });
+
+// One line per trip for the Lists page: how many got (saved), ticked by
+// hand, still to get (or, once it's over, not found), who shopped, and
+// the first few names still to get.
+function tripSummary(trip) {
+  if (!trip) return null;
+  const c = db.prepare(`
+    SELECT
+      SUM(item_id IS NOT NULL) AS got,
+      SUM(item_id IS NULL AND bought_at IS NOT NULL) AS ticked,
+      SUM(bought_at IS NULL) AS todo,
+      SUM(source IS NOT NULL) AS listed,
+      SUM(source IS NOT NULL AND bought_at IS NOT NULL) AS listed_got
+    FROM trip_entries WHERE trip_id = ?
+  `).get(trip.id);
+  const people = db.prepare(`
+    SELECT added_by FROM trip_entries
+    WHERE trip_id = ? AND bought_at IS NOT NULL AND added_by IS NOT NULL
+    GROUP BY added_by ORDER BY MIN(bought_at)
+  `).all(trip.id).map((r) => r.added_by);
+  const waiting = db.prepare(`
+    SELECT name, quantity, unit FROM trip_entries
+    WHERE trip_id = ? AND bought_at IS NULL ORDER BY created_at DESC, id DESC LIMIT 6
+  `).all(trip.id);
+  return {
+    id: trip.id,
+    status: trip.status,
+    created_at: trip.created_at,
+    started_at: trip.started_at,
+    last_activity_at: trip.last_activity_at,
+    ended_at: trip.ended_at,
+    got: c.got || 0,
+    ticked: c.ticked || 0,
+    todo: c.todo || 0,
+    listed: c.listed || 0,
+    listed_got: c.listed_got || 0,
+    people,
+    waiting,
+  };
+}
+
+// Everything for the Lists page: the trip going now, the shopping list,
+// and past trips (newest first; ones with nothing on them are left out).
+function overview(householdId, { limit = 20, before = null } = {}) {
+  const past = db.prepare(`
+    SELECT t.* FROM trips t
+    WHERE t.household_id = ? AND t.status = 'done'
+      AND EXISTS (SELECT 1 FROM trip_entries e WHERE e.trip_id = t.id)
+      AND (? IS NULL OR COALESCE(t.started_at, t.created_at) < ?)
+    ORDER BY COALESCE(t.started_at, t.created_at) DESC
+    LIMIT ?
+  `).all(requireHousehold(householdId), before, before, limit + 1);
+  return {
+    active: tripSummary(activeTrip(householdId)),
+    planned: tripSummary(plannedTrip(householdId)),
+    past: past.slice(0, limit).map(tripSummary),
+    more: past.length > limit,
+  };
+}
 
 // Quantity and unit on a list row (null quantity: "some").
 function updateEntry(householdId, id, { quantity, unit }) {
@@ -223,4 +297,5 @@ const startShopping = db.transaction((householdId, listId, username) => {
 module.exports = {
   IDLE_HOURS, activeTrip, getTrip, recordBought, tripView, endTrip,
   plannedTrip, getEntry, addToList, updateEntry, removeEntry, setTicked, startShopping,
+  addToTrip, overview,
 };

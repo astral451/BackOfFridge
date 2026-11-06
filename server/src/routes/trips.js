@@ -8,6 +8,14 @@ const { log } = require('../logger');
 
 const router = express.Router();
 
+// GET /api/trips?before=<time> - the Lists page: { active, planned,
+// past, more }. Past trips come 20 at a time; `before` is the
+// started_at of the last one shown, for "Show older trips".
+router.get('/', (req, res) => {
+  const before = typeof req.query.before === 'string' && req.query.before ? req.query.before : null;
+  res.json(trips.overview(req.householdId, { before }));
+});
+
 // GET /api/trips/current - the household's current trip with its rows
 // ({ trip: null } when there isn't one). The trip page re-reads this
 // while it's open, so two people scanning see each other's items.
@@ -118,6 +126,26 @@ router.post('/list/entries', requirePermission('items:write'), (req, res) => {
   }, req.username);
   if (added) log(`LISTED "${name}" by ${req.username} (household ${req.householdId})`);
   res.status(added ? 201 : 200).json({ ...entry, added });
+});
+
+// POST /api/trips/:id/entries - body { name, quantity?, unit? }. Adds to
+// that trip's still-to-get ("Forgot something?" from home) or to the list.
+// 404 for a trip that's over.
+router.post('/:id/entries', requirePermission('items:write'), (req, res) => {
+  const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
+  if (!name) return res.status(400).json({ error: 'name is required' });
+  const qty = readQuantity(req.body.quantity);
+  if (qty.error) return res.status(400).json({ error: qty.error });
+  const result = trips.addToTrip(req.householdId, req.params.id, {
+    name,
+    barcode: typeof req.body.barcode === 'string' && req.body.barcode ? req.body.barcode : null,
+    quantity: qty.value,
+    unit: typeof req.body.unit === 'string' ? req.body.unit.trim() : '',
+    source: 'manual',
+  }, req.username);
+  if (!result) return res.status(404).json({ error: 'That trip is over.' });
+  if (result.added) log(`ADDED TO TRIP ${req.params.id} "${name}" by ${req.username} (household ${req.householdId})`);
+  res.status(result.added ? 201 : 200).json({ ...result.entry, added: result.added });
 });
 
 // PATCH /api/trips/entries/:id - body { quantity, unit } on a list row.

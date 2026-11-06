@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<script>
+// See index.html for why this runs inline, before the stylesheet.
+(function () {
+  try {
+    var t = localStorage.getItem('theme');
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+  } catch (e) {}
+})();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BackOfFridge - Lists</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>Lists</h1>
+    <a href="index.html">&larr; Back to inventory</a>
+    <span id="whoami" class="stats"></span>
+    <button id="logoutBtn" class="small">Log out</button>
+  </header>
+
+  <main id="app" class="list-page">
+    <section class="card-section" aria-labelledby="nowHeading">
+      <h3 id="nowHeading" class="trip-subhead">Shopping now</h3>
+      <div id="nowCard" class="lists-card now" hidden>
+        <div class="lists-card-top">
+          <span id="nowStarted" class="lists-card-title"></span>
+          <span id="nowPeople" class="section-hint"></span>
+        </div>
+        <div id="nowProgress" class="progress" hidden><div id="nowBar"></div></div>
+        <div id="nowSummary" class="lists-card-text"></div>
+        <form id="addTripForm" class="list-add">
+          <input type="text" id="addTripName" placeholder="Forgot something?" autocomplete="off" aria-label="Add to this trip">
+          <button type="submit">Add</button>
+        </form>
+        <div class="lists-card-actions">
+          <a id="openTripBtn" class="btn primary" href="index.html#trip">Open trip</a>
+          <button type="button" id="endTripBtn" class="btn">End trip</button>
+        </div>
+      </div>
+      <p id="nowNone" class="trip-empty" hidden>No trip going. Saving an item, or Start shopping on the list, starts one.</p>
+    </section>
+
+    <section class="card-section" aria-labelledby="listHeading">
+      <div class="section-head">
+        <h3 id="listHeading" class="trip-subhead grow">Shopping list</h3>
+        <span class="section-hint">for next time</span>
+      </div>
+      <div class="lists-card">
+        <div class="lists-card-top">
+          <span id="listCount" class="lists-card-title"></span>
+          <span id="listSuggested" class="section-hint"></span>
+        </div>
+        <div id="listChips" class="chip-list"></div>
+        <div class="lists-card-actions">
+          <a class="btn" href="list.html" id="openListBtn">Open list</a>
+          <button type="button" id="startBtn" class="btn outline">Start shopping</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card-section" aria-labelledby="pastHeading">
+      <h3 id="pastHeading" class="trip-subhead">Past trips</h3>
+      <p id="pastNone" class="trip-empty" hidden>None yet.</p>
+      <ul id="pastRows" class="plain-rows"></ul>
+      <button type="button" id="olderBtn" class="link-btn" hidden>Show older trips</button>
+    </section>
+  </main>
+
+  <script src="lists.js"></script>
+</body>
+</html>

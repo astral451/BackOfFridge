@@ -1029,3 +1029,74 @@ body:has(.bottombar) { padding-bottom: 84px; } /* room for the fixed bottom bar 
 }
 .toast[hidden] { display: none; }
 @media (min-width: 720px) { .toast { bottom: 24px; } }
+
+/* ---------- Lists page ---------- */
+.lists-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.lists-card.now { border: 2px solid var(--accent); }
+.lists-card-top { display: flex; align-items: baseline; gap: 8px; }
+.lists-card-title { font-weight: 600; font-size: 1rem; flex: 1; }
+.lists-card-text { font-size: 0.85rem; color: var(--muted); }
+.lists-card-text strong { color: var(--text); }
+.lists-card-actions { display: flex; gap: 8px; }
+.lists-card .list-add input { background: var(--bg); }
+.progress { height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.progress > div { height: 100%; width: 0; background: var(--accent); }
+.chip-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip-list:empty { display: none; }
+.chip-item { padding: 4px 10px; border-radius: 999px; background: var(--surface-2); font-size: 0.82rem; }
+.chip-item.muted { color: var(--muted); }
+.btn {
+  flex: 1 1 0;
+  min-height: 44px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit; font-size: 0.95rem; font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.btn.primary { flex-grow: 2; border: none; background: var(--accent); color: var(--accent-ink); }
+.btn.outline { border-color: var(--accent); color: var(--accent); }
+.btn:disabled { opacity: 0.5; cursor: default; }
+.link-btn {
+  align-self: flex-start; min-height: 40px; padding: 0; border: none; background: none;
+  color: var(--accent); font: inherit; font-size: 0.9rem; font-weight: 600; cursor: pointer;
+}
+.past-row { flex-direction: row; align-items: center; gap: 10px; }
+.past-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.tag-warn {
+  flex: 0 0 auto;
+  padding: 2px 8px; border-radius: 999px;
+  background: var(--warn-bg); color: var(--warn-text);
+  font-size: 0.75rem; font-weight: 600;
+}
+.section-head .grow { flex: 1; }
+
+/* ---------- main page: "Shopping now" banner ---------- */
+.shopping-now {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border: none;
+  border-radius: 14px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.shopping-now[hidden] { display: none; }
+.shopping-now-text { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.shopping-now-title { font-weight: 600; font-size: 0.95rem; }
+.shopping-now-sub { font-size: 0.82rem; opacity: 0.9; }

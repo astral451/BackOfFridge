@@ -22,16 +22,26 @@
   <header>
     <h1>BackOfFridge</h1>
     <div id="stats" class="stats"></div>
-    <a href="list.html">Shopping list</a>
+    <a href="lists.html">Lists</a>
     <a href="glance.html">At a glance</a>
-    <a href="locations.html">Manage locations</a>
-    <a href="tags.html">Manage tags</a>
+    <a href="locations.html">Locations</a>
+    <a href="tags.html">Tags</a>
     <a href="settings.html">Settings</a>
     <span id="whoami" class="stats"></span>
     <button id="logoutBtn" class="small">Log out</button>
   </header>
 
   <main id="app">
+    <!-- While a trip is going, for everyone in the household. -->
+    <button type="button" id="shoppingNow" class="shopping-now" hidden>
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h2l2.5 11h11L21 7H6.2"/><circle cx="9" cy="19.5" r="1.5"/><circle cx="17" cy="19.5" r="1.5"/></svg>
+      <span class="shopping-now-text">
+        <span class="shopping-now-title">Shopping now</span>
+        <span class="shopping-now-sub" id="shoppingNowSub"></span>
+      </span>
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg>
+    </button>
+
     <div class="view-toggle" id="viewToggle" role="group" aria-label="List view">
       <button type="button" data-view="grouped" class="active">By location</button>
       <button type="button" data-view="flat">All items</button>
