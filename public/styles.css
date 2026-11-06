@@ -413,28 +413,177 @@ button.small:disabled { opacity: 0.4; cursor: not-allowed; }
    reliably on every browser, but out of sight and out of the tab order. */
 .offscreen { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; overflow: hidden; }
 
+/* ---------- the quick entry card ----------
+   On a phone it covers the screen: a header, a body that scrolls, and the
+   save button pinned at the bottom. From 720px it's the side panel (see
+   the media query further down). */
 .sheet {
   position: fixed;
-  left: 0; right: 0; bottom: 0;
+  inset: 0;
   z-index: 40;
-  background: var(--surface);
-  border-top: 1px solid var(--border);
-  border-radius: 18px 18px 0 0;
-  padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px));
-  box-shadow: 0 -14px 30px -14px var(--shadow);
-  max-width: 480px;
-  margin: 0 auto;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
 }
-.sheet h2 { margin: 0 0 10px; font-size: 1rem; }
+.sheet[hidden] { display: none; }
+body.sheet-open { overflow: hidden; }
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: calc(8px + env(safe-area-inset-top, 0px)) 16px 8px 6px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.card-head h2 {
+  margin: 0;
+  flex: 1;
+  font-family: "Libre Franklin", sans-serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
 .sheet-close {
-  position: absolute;
-  top: 12px; right: 14px;
+  width: 44px; height: 44px;
+  display: flex; align-items: center; justify-content: center;
   background: none;
   border: none;
-  color: var(--muted);
-  font-size: 1.1rem;
+  color: var(--text);
   cursor: pointer;
 }
+.card-form { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.card-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 12px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.card-foot {
+  display: flex;
+  gap: 10px;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+.card-foot .save-btn { margin: 0; min-height: 52px; border-radius: 12px; font-size: 1rem; }
+.card-input, .product-box input, .barcode-row input {
+  font: inherit;
+  font-size: 16px;
+  padding: 8px 10px;
+  min-height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  width: 100%;
+}
+.card-body .disclosure-toggle { margin: 0; text-align: left; }
+.card-body .form-grid input, .card-body .form-grid select { background: var(--surface); }
+
+.product-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.product-source {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.product-box .name-input {
+  font-family: "Libre Franklin", sans-serif;
+  font-weight: 700;
+  font-size: 17px;
+}
+.product-detail { font-size: 0.82rem; color: var(--muted); margin-top: -4px; }
+.qty-row { display: flex; align-items: center; gap: 8px; }
+.qty-row label { font-size: 0.9rem; font-weight: 600; width: 34px; }
+.qty-row .step-btn {
+  flex: 0 0 auto;
+  width: 48px; height: 48px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.product-box .qty-row input {
+  width: 64px;
+  height: 48px;
+  flex: 0 0 auto;
+  text-align: center;
+  font-size: 20px;
+  font-weight: 600;
+  padding: 0 4px;
+}
+.qty-unit { font-size: 0.9rem; color: var(--muted); min-width: 0; overflow-wrap: anywhere; }
+.fill-row { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--muted); }
+.fill-row input { width: 90px; flex: 0 0 auto; }
+
+.card-section { display: flex; flex-direction: column; gap: 8px; }
+.section-head { display: flex; align-items: baseline; gap: 8px; }
+.section-head h3 {
+  margin: 0;
+  font-family: "Libre Franklin", sans-serif;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+.section-hint { font-size: 0.82rem; color: var(--muted); min-width: 0; }
+
+/* Two rows of square-ish tiles that scroll sideways (households have 10+
+   locations). They never reorder; the row scrolls to the selected one. */
+.loc-tiles {
+  position: relative; /* so a tile's offsetLeft is measured from here */
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(2, 64px);
+  grid-auto-columns: 80px;
+  gap: 8px;
+  overflow-x: auto;
+  margin: 0 -16px;
+  padding: 2px 16px 6px;
+  scroll-padding: 0 16px;
+  scrollbar-width: none;
+}
+.loc-tiles::-webkit-scrollbar { display: none; }
+.loc-tile {
+  box-sizing: border-box;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.2;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  overflow-wrap: anywhere;
+  overflow: hidden;
+  cursor: pointer;
+}
+.loc-tile[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: 2px solid var(--accent);
+  font-weight: 600;
+}
+.loc-tile-new { border-style: dashed; background: transparent; color: var(--muted); }
+
 body:has(.bottombar) { padding-bottom: 84px; } /* room for the fixed bottom bar */
 
 /* ---------- location groups + item rows ---------- */
@@ -638,15 +787,18 @@ body:has(.bottombar) { padding-bottom: 84px; } /* room for the fixed bottom bar 
   }
   .add-shell.with-panel .bottombar #openSheetBtn { display: none; }
   .add-shell.with-panel .sheet {
-    position: static;
-    flex: 0 0 340px;
-    width: auto;
-    max-width: none;
-    border-radius: 12px;
+    position: sticky;
+    top: 16px;
+    flex: 0 0 360px;
+    max-height: calc(100vh - 32px);
+    border-radius: 14px;
     border: 1px solid var(--border);
-    box-shadow: none;
-    display: block !important;
+    overflow: hidden;
+    display: flex !important;
   }
+  .add-shell.with-panel .card-head { padding-top: 8px; }
+  .add-shell.with-panel .card-foot { padding-bottom: 10px; }
+  body.sheet-open { overflow: auto; }
   /* There's room for every field at once here, so the disclosure that
      narrow phone widths need (More fields ▾) is pointless - show the
      whole form and drop the toggle that would otherwise show/hide it. */

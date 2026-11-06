@@ -73,47 +73,83 @@
         <div id="itemGroups"></div>
       </div>
 
-      <div class="sheet" id="itemSheet" hidden>
-        <button class="sheet-close" type="button" id="closeSheetBtn">✕</button>
-        <h2>Log a purchase</h2>
-        <form id="itemForm">
-          <div class="form-grid compact">
-            <div class="barcode-row full">
+      <!-- The quick entry card (features.md, "Quick entry card"): one form
+           for every way of adding or changing an item. -->
+      <div class="sheet entry-card" id="itemSheet" hidden>
+        <div class="card-head">
+          <button class="sheet-close" type="button" id="closeSheetBtn" aria-label="Close"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+          <h2 id="sheetTitle">Log a purchase</h2>
+        </div>
+        <form id="itemForm" class="card-form">
+          <div class="card-body">
+            <div class="barcode-row">
               <input type="text" id="f-barcode" placeholder="Barcode (type or scan)" inputmode="numeric" autocomplete="off" aria-label="Barcode">
               <button type="button" id="scanBtn" class="scan-btn"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg> Scan</button>
               <!-- Opens the phone's own camera; the photo is read on the server. -->
               <input type="file" id="f-scan-file" accept="image/*" capture="environment" class="offscreen" tabindex="-1" aria-hidden="true">
             </div>
-            <div id="scanStatus" class="scan-status full" role="status" hidden></div>
-            <div id="scanMatch" class="scan-match full" hidden></div>
-            <input type="text" id="f-name" placeholder="Item name" required class="full">
-            <input type="number" id="f-quantity" placeholder="Qty" step="any" value="1">
-            <input type="text" id="f-unit" placeholder="Unit (oz, lbs, count...)">
-            <label class="full hidden" id="f-fill-wrap">Open one, % full <input type="number" id="f-fillpercent" placeholder="Fill %" min="0" max="100"></label>
-            <select id="f-location-select" class="full">
-              <option value="">Select location...</option>
-              <option value="__new__">+ Add new location...</option>
-            </select>
-            <input type="text" id="f-location-new" placeholder="New location name" class="hidden full">
+            <div id="scanStatus" class="scan-status" role="status" hidden></div>
+            <div id="scanMatch" class="scan-match" hidden></div>
+
+            <div class="product-box">
+              <div id="productSource" class="product-source" hidden></div>
+              <input type="text" id="f-name" placeholder="Item name" required class="name-input" aria-label="Item name" autocomplete="off">
+              <div id="productDetail" class="product-detail" hidden></div>
+              <div class="qty-row">
+                <label for="f-quantity">Qty</label>
+                <button type="button" class="step-btn" id="qtyMinus" aria-label="One fewer">−</button>
+                <input type="text" id="f-quantity" inputmode="decimal" value="1" autocomplete="off">
+                <button type="button" class="step-btn" id="qtyPlus" aria-label="One more">+</button>
+                <span id="qtyUnit" class="qty-unit"></span>
+              </div>
+              <label class="fill-row hidden" id="f-fill-wrap">Open one, % full <input type="number" id="f-fillpercent" placeholder="Fill %" min="0" max="100"></label>
+            </div>
+
+            <section class="card-section" aria-labelledby="whereHeading">
+              <div class="section-head">
+                <h3 id="whereHeading">Where</h3>
+                <span id="locHint" class="section-hint">Tap where it goes</span>
+              </div>
+              <div class="loc-tiles" id="locTiles" role="group" aria-labelledby="whereHeading"></div>
+              <!-- The tiles above drive this; it's what the rest of the code reads. -->
+              <select id="f-location-select" class="hidden" aria-hidden="true" tabindex="-1">
+                <option value="">Select location...</option>
+                <option value="__new__">+ Add new location...</option>
+              </select>
+              <input type="text" id="f-location-new" placeholder="New location name" class="card-input hidden">
+            </section>
+
+            <section class="card-section" aria-labelledby="expHeading">
+              <div class="section-head">
+                <h3 id="expHeading"><label for="f-expiration">Expires</label></h3>
+              </div>
+              <input type="date" id="f-expiration" class="card-input">
+            </section>
+
+            <button class="disclosure-toggle" type="button" data-toggle="moreFields">More details (unit, category, tag, notes) ▾</button>
+            <div class="form-grid" hidden id="moreFields">
+              <label>Unit <input type="text" id="f-unit" placeholder="oz, lb, box..."></label>
+              <label>Category
+                <select id="f-category">
+                  <option value="perishable">Perishable</option>
+                  <option value="nonperishable">Non-perishable</option>
+                </select>
+              </label>
+              <label class="full">Tag
+                <select id="f-tag-select">
+                  <option value="">Select tag...</option>
+                  <option value="__new__">+ Add new tag...</option>
+                </select>
+              </label>
+              <input type="text" id="f-tag-new" placeholder="New tag name" class="hidden full">
+              <label class="full">Purchased <input type="date" id="f-purchase"></label>
+              <input type="text" id="f-notes" placeholder="Notes" class="full" aria-label="Notes">
+            </div>
           </div>
 
-          <button class="disclosure-toggle" type="button" data-toggle="moreFields">More fields ▾</button>
-          <div class="form-grid" hidden id="moreFields">
-            <select id="f-category">
-              <option value="perishable">Perishable</option>
-              <option value="nonperishable">Non-perishable</option>
-            </select>
-            <select id="f-tag-select">
-              <option value="">Select tag...</option>
-              <option value="__new__">+ Add new tag...</option>
-            </select>
-            <input type="text" id="f-tag-new" placeholder="New tag name" class="hidden full">
-            <label class="full">Purchased <input type="date" id="f-purchase"></label>
-            <label class="full">Expires <input type="date" id="f-expiration"></label>
-            <input type="text" id="f-notes" placeholder="Notes" class="full">
+          <div class="card-foot">
+            <button type="submit" class="save-btn">Add item</button>
           </div>
-
-          <button type="submit" class="save-btn">Add item</button>
         </form>
       </div>
     </div>

@@ -84,9 +84,13 @@
 
   function openSheet() {
     document.getElementById('itemSheet').hidden = false;
+    document.body.classList.add('sheet-open');
+    // The tiles can only be scrolled once they're laid out.
+    requestAnimationFrame(scrollToSelectedTile);
   }
   function closeSheet() {
     document.getElementById('itemSheet').hidden = true;
+    document.body.classList.remove('sheet-open');
   }
   function expandMoreFields() {
     document.getElementById('moreFields').hidden = false;
@@ -101,11 +105,11 @@
     setAddMode();
     document.getElementById('f-name').value = (item.name || '').trim();
     document.getElementById('f-category').value = item.category;
-    document.getElementById('f-location-select').value = item.location;
-    document.getElementById('f-location-new').classList.add('hidden');
+    setFormLocation(item.location);
     document.getElementById('f-tag-select').value = item.tag || '';
     document.getElementById('f-tag-new').classList.add('hidden');
     document.getElementById('f-unit').value = item.unit;
+    syncQtyUnit();
     // The amount originally bought (a 12-pack is 12), not what's left of it
     // now. Falls back to the current quantity for anything that somehow
     // lacks purchased_quantity.
@@ -629,10 +633,8 @@
     document.getElementById('f-name').value = parsed.name;
     if (parsed.quantity !== null) document.getElementById('f-quantity').value = parsed.quantity;
     if (parsed.unit) document.getElementById('f-unit').value = parsed.unit;
-    if (parsed.location) {
-      document.getElementById('f-location-select').value = parsed.location;
-      document.getElementById('f-location-new').classList.add('hidden');
-    }
+    syncQtyUnit();
+    if (parsed.location) setFormLocation(parsed.location);
     var touchedMoreFields = false;
     if (parsed.tag) {
       document.getElementById('f-tag-select').value = parsed.tag;
@@ -676,7 +678,7 @@
     editingItemId = null;
     formTrackingMode = null;
     document.getElementById('f-fill-wrap').classList.add('hidden');
-    document.querySelector('#itemSheet h2').textContent = 'Log a purchase';
+    document.getElementById('sheetTitle').textContent = 'Log a purchase';
     document.querySelector('#itemForm .save-btn').textContent = 'Add item';
   }
 
@@ -686,13 +688,17 @@
   function resetItemForm() {
     document.getElementById('itemForm').reset();
     document.getElementById('f-category').value = 'perishable';
-    document.getElementById('f-location-new').classList.add('hidden');
     document.getElementById('f-tag-new').classList.add('hidden');
     document.getElementById('moreFields').hidden = true;
     setScanStatus('');
+    setProductInfo(null);
     lastLookedUp = null;
     setDefaultPurchaseDate();
     setAddMode();
+    // A shopping trip mostly goes in one place, so a new item starts where
+    // the last one saved went.
+    setFormLocation(lastSavedLocation, lastSavedLocation ? 'last item' : null);
+    syncQtyUnit();
   }
 
   // Opens the same purchase sheet used for adding, pre-filled with every
@@ -708,8 +714,7 @@
 
     document.getElementById('f-name').value = (item.name || '').trim();
     document.getElementById('f-category').value = item.category;
-    document.getElementById('f-location-select').value = item.location;
-    document.getElementById('f-location-new').classList.add('hidden');
+    setFormLocation(item.location);
     document.getElementById('f-tag-select').value = item.tag || '';
     document.getElementById('f-tag-new').classList.add('hidden');
     document.getElementById('f-purchase').value = item.purchase_date || '';
@@ -717,16 +722,18 @@
     document.getElementById('f-notes').value = item.notes || '';
     document.getElementById('f-barcode').value = item.barcode || '';
     setScanStatus('');
+    setProductInfo(null);
 
     document.getElementById('f-quantity').value = item.quantity;
     document.getElementById('f-unit').value = item.unit || '';
+    syncQtyUnit();
     if (item.tracking_mode === 'fill_level') {
       showFillField(item.fill_percent != null ? item.fill_percent : 100);
     } else {
       document.getElementById('f-fill-wrap').classList.add('hidden');
     }
 
-    document.querySelector('#itemSheet h2').textContent = 'Edit item';
+    document.getElementById('sheetTitle').textContent = 'Edit item';
     document.querySelector('#itemForm .save-btn').textContent = 'Save changes';
     expandMoreFields();
     document.getElementById('itemSheet').scrollIntoView({ behavior: 'smooth' });
@@ -1216,7 +1223,12 @@
     addNewOpt.value = '__new__';
     addNewOpt.textContent = '+ Add new location...';
     formSelect.appendChild(addNewOpt);
+    // A location typed for an item that's still open stays selectable.
+    if (currentFormVal && currentFormVal !== '__new__' && locations.indexOf(currentFormVal) === -1) {
+      addLocationOption(currentFormVal);
+    }
     formSelect.value = currentFormVal;
+    renderLocationTiles();
   }
 
   function renderTags(tags) {
@@ -1333,16 +1345,140 @@
     return select.value;
   }
 
-  document.getElementById('f-location-select').addEventListener('change', function () {
+  // --- Quick entry card: location tiles, quantity stepper -------------
+  // The hidden #f-location-select stays the single source of truth for
+  // the form's location (quick add's parser reads its options too); the
+  // tiles are drawn from it and write back to it.
+
+  // Where the last item added went, so the next one this trip starts there.
+  var lastSavedLocation = '';
+
+  function formLocationOptions() {
+    return Array.prototype.map.call(document.querySelectorAll('#f-location-select option'), function (o) { return o.value; })
+      .filter(function (v) { return v && v !== '__new__'; });
+  }
+
+  // For a location the household's list doesn't have (yet): an item's old
+  // location, or one quick add read. Goes just before "+ Add new".
+  function addLocationOption(loc) {
+    var select = document.getElementById('f-location-select');
+    var opt = document.createElement('option');
+    opt.value = loc;
+    opt.textContent = loc;
+    select.insertBefore(opt, select.querySelector('option[value="__new__"]'));
+  }
+
+  // Selects `loc` ('' for none). `why` says why it was picked for the
+  // user, for the line beside "Where": 'last time' (this product went
+  // there before) or 'last item' (the previous item this trip).
+  var locationReason = null;
+  function setFormLocation(loc, why) {
+    loc = loc || '';
+    if (loc && formLocationOptions().indexOf(loc) === -1) addLocationOption(loc);
+    document.getElementById('f-location-select').value = loc;
     var newInput = document.getElementById('f-location-new');
-    if (this.value === '__new__') {
+    newInput.classList.add('hidden');
+    newInput.value = '';
+    locationReason = loc ? (why || null) : null;
+    renderLocationTiles();
+    scrollToSelectedTile();
+  }
+
+  function locTile(label, value, selected, extraClass) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'loc-tile' + (extraClass ? ' ' + extraClass : '');
+    b.textContent = label;
+    b.setAttribute('aria-pressed', String(selected));
+    b.dataset.value = value;
+    return b;
+  }
+
+  // Tiles stay in the list's order whatever is selected: moving the
+  // chosen one to the front was jarring. The row scrolls to it instead.
+  function renderLocationTiles() {
+    var box = document.getElementById('locTiles');
+    var current = document.getElementById('f-location-select').value;
+    box.textContent = '';
+    formLocationOptions().forEach(function (loc) {
+      box.appendChild(locTile(loc, loc, loc === current));
+    });
+    box.appendChild(locTile('+ New', '__new__', current === '__new__', 'loc-tile-new'));
+    updateLocHint();
+  }
+
+  function updateLocHint() {
+    var current = document.getElementById('f-location-select').value;
+    var text = 'Tap where it goes';
+    if (current === '__new__') {
+      text = document.getElementById('f-location-new').value.trim() || 'New location';
+    } else if (current) {
+      text = current
+        + (locationReason === 'last time' ? ' · where it went last time'
+          : locationReason === 'last item' ? ' · same as the last item' : '');
+    }
+    document.getElementById('locHint').textContent = text;
+  }
+
+  // Brings the selected tile into view if it's scrolled out of sight.
+  function scrollToSelectedTile() {
+    var box = document.getElementById('locTiles');
+    var tile = box.querySelector('.loc-tile[aria-pressed="true"]');
+    if (!tile || !box.clientWidth) return;
+    var left = tile.offsetLeft;
+    var right = left + tile.offsetWidth;
+    if (left >= box.scrollLeft && right <= box.scrollLeft + box.clientWidth) return;
+    box.scrollLeft = left - (box.clientWidth - tile.offsetWidth) / 2;
+  }
+
+  document.getElementById('locTiles').addEventListener('click', function (e) {
+    var tile = e.target.closest('.loc-tile');
+    if (!tile) return;
+    var value = tile.dataset.value;
+    var select = document.getElementById('f-location-select');
+    var newInput = document.getElementById('f-location-new');
+    if (value === '__new__') {
+      select.value = '__new__';
+      locationReason = null;
+      renderLocationTiles();
       newInput.classList.remove('hidden');
       newInput.focus();
-    } else {
-      newInput.classList.add('hidden');
-      newInput.value = '';
+      return;
     }
+    // Tapping the selected tile again clears it.
+    setFormLocation(select.value === value ? '' : value);
   });
+  document.getElementById('f-location-new').addEventListener('input', updateLocHint);
+
+  // "Bought before" / "Found on Open Food Facts" above the name, and the
+  // brand and package size under it. null clears both.
+  function setProductInfo(source, detail) {
+    var src = document.getElementById('productSource');
+    var det = document.getElementById('productDetail');
+    src.textContent = source || '';
+    src.hidden = !source;
+    det.textContent = (source && detail) || '';
+    det.hidden = !(source && detail);
+  }
+
+  // The unit beside the stepper ("box", "12 fl oz"); edited under More details.
+  function syncQtyUnit() {
+    document.getElementById('qtyUnit').textContent = document.getElementById('f-unit').value.trim();
+  }
+  document.getElementById('f-unit').addEventListener('input', syncQtyUnit);
+
+  // − / + step by one and stop at 1; the box takes any amount typed
+  // (1.5 for a pound and a half).
+  function stepQuantity(delta) {
+    var input = document.getElementById('f-quantity');
+    var n = parseFloat(input.value);
+    if (!(n > 0)) n = 1;
+    var next = Math.round((n + delta) * 1000) / 1000;
+    if (next < 1) next = n < 1 ? n : 1;
+    input.value = next;
+  }
+  document.getElementById('qtyMinus').addEventListener('click', function () { stepQuantity(-1); });
+  document.getElementById('qtyPlus').addEventListener('click', function () { stepQuantity(1); });
 
   document.getElementById('f-tag-select').addEventListener('change', function () {
     var newInput = document.getElementById('f-tag-new');
@@ -1368,7 +1504,7 @@
   function setScanStatus(text, kind) {
     var el = document.getElementById('scanStatus');
     el.textContent = text;
-    el.className = 'scan-status full' + (kind ? ' ' + kind : '');
+    el.className = 'scan-status' + (kind ? ' ' + kind : '');
     el.hidden = !text;
     showMatches(null);
   }
@@ -1454,6 +1590,7 @@
 
     var p = result.product;
     if (!p) {
+      setProductInfo(null);
       setScanStatus((result.lookup_error
         ? 'Couldn\'t reach Open Food Facts. '
         : 'New barcode. ') + 'Type the name, and it\'ll be remembered next time.' + expiryNote);
@@ -1465,12 +1602,12 @@
     if (p.source === 'local') {
       // Bought here before: bring back this household's own choices.
       if (p.category) document.getElementById('f-category').value = p.category;
-      document.getElementById('f-location-select').value = p.location || '';
-      document.getElementById('f-location-new').classList.add('hidden');
+      setFormLocation(p.location || '', p.location ? 'last time' : null);
       document.getElementById('f-tag-select').value = p.tag || '';
       document.getElementById('f-tag-new').classList.add('hidden');
       document.getElementById('f-unit').value = p.unit || '';
       document.getElementById('f-quantity').value = p.purchase_quantity > 0 ? p.purchase_quantity : 1;
+      syncQtyUnit();
       if (p.tracking_mode === 'fill_level') {
         formTrackingMode = 'fill_level';
         showFillField(100);
@@ -1478,7 +1615,8 @@
         formTrackingMode = null;
         document.getElementById('f-fill-wrap').classList.add('hidden');
       }
-      setScanStatus('Bought before: ' + p.name + '.' + expiryNote, 'found');
+      setProductInfo('Bought before', [p.brand, p.package].filter(Boolean).join(' · '));
+      setScanStatus(expiryNote.trim(), 'found');
     } else {
       // Open Food Facts' package size, read by the server: Unit is the size
       // of each ("330 ml"), Qty how many when the pack says ("12 x ...").
@@ -1487,9 +1625,9 @@
       var qtyInput = document.getElementById('f-quantity');
       if (p.unit && !unitInput.value.trim()) unitInput.value = p.unit;
       if (p.purchase_quantity > 1 && (qtyInput.value === '' || qtyInput.value === '1')) qtyInput.value = p.purchase_quantity;
-      var details = [p.brand, p.package].filter(Boolean).join(', ');
-      setScanStatus('Found on Open Food Facts: ' + p.name + (details ? ' (' + details + ')' : '')
-        + '. Check the name and fill in the rest.' + expiryNote, 'found');
+      syncQtyUnit();
+      setProductInfo('Found on Open Food Facts', [p.brand, p.package].filter(Boolean).join(' · '));
+      setScanStatus(expiryNote.trim(), 'found');
       showMatches(result);
     }
   }
@@ -1579,7 +1717,9 @@
       ? apiFetch('/items/' + editingItemId, { method: 'PATCH', body: JSON.stringify(payload) })
       : apiFetch('/items', { method: 'POST', body: JSON.stringify(payload) });
 
+    var wasAdding = !editingItemId;
     request.then(function () {
+      if (wasAdding && payload.location) lastSavedLocation = payload.location;
       resetItemForm();
       closeSheet();
       refresh();

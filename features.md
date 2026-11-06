@@ -517,8 +517,7 @@ priority — a Low item isn't necessarily more worth doing than a High one.
     identify barcode-less items (produce) or read a printed "best by" date.
     This needs an API key and costs per call, so it's phase 2.
 - **Quick entry card: one form for adding and editing (Medium)** —
-  designed, being built next (scanning has shipped, so this starts from
-  the known interface). Clickable mockups:
+  being built in steps on `claude/barcode-scanning`. Clickable mockups:
   https://claude.ai/artifact/JPGBHKB7F1ujrPWv6KbgpK (private to the user).
 
   The purchase sheet is replaced by a compact card that fits one phone
@@ -556,6 +555,23 @@ priority — a Low item isn't necessarily more worth doing than a High one.
     is usually entered at once. On iOS the camera can only open in
     response to a tap, so this button's tap opens it. A plain **Save**
     sits beside it, and the header counts items saved this trip.
+
+  Progress:
+  - **Step 1 built (2026-11-06): the card shell.** The sheet is now the
+    card: full screen on a phone (header, scrolling body, save button
+    pinned at the bottom), the side panel from 720px. Name box with
+    "Bought before" / "Found on Open Food Facts" above the name and
+    brand · package under it; the − / + quantity stepper with the unit
+    beside it; location tiles (two rows, sideways scroll, fixed order,
+    the row scrolls to the selected tile, tap again to clear, "+ New"
+    opens the name box). The hidden `#f-location-select` is still what
+    the code reads; `setFormLocation()` keeps tiles, select and the hint
+    line in step. Preselect: last time's location on a bought-before
+    scan, else where the last item added this page visit went. Unit
+    moved under More details; Expires is still a plain date box until
+    step 2. +, Buy again, quick add and Edit already use the card, since
+    it's the same form.
+  - Next: step 2, the expiry chips and the 3-tap picker.
 
   Decisions (2026-11-05):
   - **Typing an item in (+):** the name field comes first, with
