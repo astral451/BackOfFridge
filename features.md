@@ -623,28 +623,84 @@ priority — a Low item isn't necessarily more worth doing than a High one.
   - **Edit** opens on Exact date with the item's current date selected,
     or, with no date, on the tab that matches its category.
   - Both the light and dark themes.
-- **Trip list as its own place: corrections after unpacking, and a
-  shopping list (Medium; ideas from the user, 2026-11-06, not designed
-  yet)** — builds on the trip list (see "Quick entry card", Progress).
-  The user sees the trip list as separate from the inventory: a record of
-  one shopping run, in the order things went in, that the same visual
-  format can serve twice.
-  - *Correcting after putting things away:* "oh, I already had one of
-    these". The trip list is where that gets fixed, after the fact.
-    Open question: what the fix does. Possibly fold the new purchase
-    into the existing item (quantities add; but the two may have
-    different expiry dates), or link it to an existing product the
-    household entered under another name (like the scan's "Same as
-    your ...?" question, but later), or just delete the duplicate.
-  - *Shopping list from what's been used:* the same kind of list, built
-    from what was consumed or thrown out recently (and low stock), as
-    the start of "what we need". `item_events` already records each
-    `consumed` / `thrown_out` with a time, and the "catch-up burst" note
-    below applies when reading it. A natural link: a trip that saves a
-    listed item ticks it off.
-  - Open: whether trips and lists live on the server, shared by the
-    household (a migration, 006), rather than per phone in localStorage
-    as the trip list is today.
+- **Trips: shared shopping trips and the shopping list (Medium/High;
+  proposed design, 2026-11-06, waiting on the user's review)** — grows
+  the trip list (see "Quick entry card", Progress) into its own part of
+  the app, separate from the inventory. A trip is one shopping run; a
+  shopping list is a trip that hasn't started yet. Both use the trip
+  list's look: one row per thing, newest at the top.
+
+  What the user asked for (2026-11-06):
+  - **Shared.** Two people can scan into the same trip at once, and the
+    whole household sees the same trips and lists.
+  - **Fix names after unpacking.** A scan saved as "Milk 2%" when the
+    household calls it "2% milk": on the trip page, link it to the
+    existing name, so it's renamed now and the next scan fills in "2%
+    milk". (The scan's "Same as your ...?" question usually catches this
+    up front; this is the after-the-fact fix.)
+  - **Build a list from what's been used.** A new shopping list starts
+    with "things you might want": recently used up or thrown out, low
+    stock, expiring soon. Tap the ones you want.
+  - **Scanning in the store turns the list into the current trip.**
+
+  **Proposed data model (migration 006).**
+  - `trips`: `id`, `household_id`, `status` (`planned` / `active` /
+    `done`), `created_by`, `created_at`, `started_at`, `ended_at`.
+  - `trip_entries`: `id`, `trip_id`, `household_id`, `name`, `barcode`
+    (nullable), `quantity` (wanted, nullable), `source` (`used`,
+    `low_stock`, `expiring`, `manual`, or null for something just
+    bought), `item_id` (the item saved, null until bought), `added_by`,
+    `created_at`, `bought_at`.
+    A list row is an entry with no `item_id`; buying it sets `item_id`
+    and `bought_at`. Something bought that wasn't on the list is an
+    entry created with `item_id` set.
+  - Product identity is the one already used: the barcode, else the
+    lower-cased trimmed name.
+
+  **Proposed behaviour.**
+  - *One current trip per household.* Saving an item adds it to the
+    household's `active` trip, or starts one. Both phones see it; the
+    trip page re-reads every ~10 s while it's open. A trip ends with
+    "End trip" or after 3 hours with no saves (as now).
+  - *One shopping list at a time* (a `planned` trip). "Shopping list"
+    opens it, or starts one.
+  - *Suggestions.* Above the list, "Things you might want", in three
+    groups, each row with an Add button:
+    - **Used up** in the last 14 days: items consumed or thrown out,
+      by product, where nothing of that product is still in stock.
+    - **Low stock**: the existing `low_stock` flag.
+    - **Expiring** in the next 3 days (replace it before it goes).
+    Plus a name box to add anything else, with suggestions from the
+    household's products. Already on the list = not suggested.
+  - *List to trip.* The first item saved while a shopping list exists
+    and no trip is active makes that list the active trip (no extra
+    button needed; "Start shopping" could be added if wanted).
+  - *Ticking off.* A save whose barcode or name matches a list row ticks
+    it (sets `item_id`). A near match (the existing name matcher) asks
+    "Is this the 2% milk on your list?" in the card. A row can also be
+    ticked by hand.
+  - *The trip page, one page for both.* "Still to get" (unticked list
+    rows) at the top, then everything bought, newest first, as now;
+    a bought row that came off the list says so. Rows open Edit as
+    now.
+  - *Link to a name.* Each bought row gets "Same as one of yours…":
+    pick an existing household name (with suggestions). The item is
+    renamed and, if it has a barcode, the barcode is linked to that
+    name (the existing `POST /api/products/:barcode/link`, plus the
+    rename).
+  - The per-phone trip in localStorage goes away.
+
+  **Proposed build order** (each step tryable on the phone):
+  1. Shared trips on the server: migration 006, saves go to the active
+     trip, the trip page reads it and re-reads while open.
+  2. "Same as one of yours…" on bought rows.
+  3. The shopping list: suggestions, picking, adding by name.
+  4. List to trip, auto-ticking, "Still to get".
+
+  **To confirm with the user:** one list at a time (vs. several, e.g.
+  per store); the first save starting the trip automatically; the 14-day
+  and 3-day windows; whether quantities matter on the list or a name is
+  enough.
 - **Quantity model: purchased amount and per-unit fill level (Low → Medium,
   two steps)** — two related fixes to what an item's `quantity` means,
   planned together but built in order. Step 1 is small, fixes a bug in use
