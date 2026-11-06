@@ -591,6 +591,15 @@ priority — a Low item isn't necessarily more worth doing than a High one.
     (count and last location) is kept in localStorage, so a reload after
     the camera doesn't lose it, and ends after 3 hours with no save.
     Edit shows a single Save changes and doesn't count.
+  - **Trip list (2026-11-06, the user's idea).** Tapping "Trip: N
+    saved" shows everything saved this trip, newest at the top and
+    numbered in the order it went in, as a check before the bags are put
+    away. Each row is name, ×qty unit · location · expiry; tapping one
+    opens Edit, and saving returns to the list. Deleted items show as
+    "Deleted". "Add more" goes back to the card; "End trip" (after a
+    confirm) starts the count at 0. The trip keeps item ids in
+    localStorage, so it's per phone/browser, not shared across the
+    household.
   - Next: step 4, moving **+**, Buy again and Edit fully onto the card
     (they already open it; what's left is checking each pre-fills it as
     designed, e.g. + opening with the name first and suggestions).

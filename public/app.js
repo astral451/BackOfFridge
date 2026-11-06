@@ -84,12 +84,14 @@
 
   function openSheet() {
     document.getElementById('itemSheet').hidden = false;
+    hideTripView();
     document.body.classList.add('sheet-open');
     // The tiles can only be scrolled once they're laid out.
     requestAnimationFrame(scrollToSelectedTile);
   }
   function closeSheet() {
     document.getElementById('itemSheet').hidden = true;
+    hideTripView();
     document.body.classList.remove('sheet-open');
   }
   function expandMoreFields() {
@@ -706,8 +708,9 @@
   // overflow menu - bringing up the full add form (rather than a separate
   // inline editor) means every field is reachable through controls that
   // already work correctly (location/tag pickers, date inputs, etc).
-  function startEdit(item) {
+  function startEdit(item, fromTrip) {
     openSheet();
+    editFromTrip = !!fromTrip;
     editingItemId = item.id;
     formTrackingMode = item.tracking_mode;
 
@@ -1608,15 +1611,21 @@
   function loadTrip() {
     var t = null;
     try { t = JSON.parse(localStorage.getItem('trip') || 'null'); } catch (e) {}
-    if (!t || !(Date.now() - t.at < TRIP_IDLE_MS)) t = { count: 0, location: '', at: 0 };
+    if (!t || !(Date.now() - t.at < TRIP_IDLE_MS)) t = { count: 0, location: '', at: 0, ids: [] };
+    if (!t.ids) t.ids = [];
     return t;
   }
-  function noteTripSave(payload) {
+  function saveTrip(t) {
+    try { localStorage.setItem('trip', JSON.stringify(t)); } catch (e) {}
+  }
+  // `item` is the saved item; its id is kept, in order, for the trip view.
+  function noteTripSave(payload, item) {
     var t = loadTrip();
     t.count += 1;
     if (payload.location) t.location = payload.location;
+    if (item && item.id != null) t.ids.push(item.id);
     t.at = Date.now();
-    try { localStorage.setItem('trip', JSON.stringify(t)); } catch (e) {}
+    saveTrip(t);
     renderTripCount();
   }
   function renderTripCount() {
@@ -2016,8 +2025,8 @@
   }
 
   function postItem(payload) {
-    return apiFetch('/items', { method: 'POST', body: JSON.stringify(payload) }).then(function () {
-      noteTripSave(payload);
+    return apiFetch('/items', { method: 'POST', body: JSON.stringify(payload) }).then(function (item) {
+      noteTripSave(payload, item);
       refresh();
     });
   }
@@ -2030,12 +2039,98 @@
     var request = editingItemId
       ? apiFetch('/items/' + editingItemId, { method: 'PATCH', body: JSON.stringify(payload) }).then(refresh)
       : postItem(payload);
+    var backToTrip = editFromTrip;
     request.then(function () {
       resetItemForm();
-      closeSheet();
+      if (backToTrip) showTripView();
+      else closeSheet();
     }).catch(function (err) {
       alert(err.message);
     });
+  });
+
+  // --- This trip -------------------------------------------------------
+  // Tapping "Trip: N saved" lists what this trip saved, newest at the top,
+  // numbered in the order it went in. Tapping one edits it, then comes
+  // back here.
+  var editFromTrip = false;
+
+  function hideTripView() {
+    document.getElementById('tripView').hidden = true;
+    document.getElementById('itemForm').hidden = false;
+    editFromTrip = false;
+    if (!editingItemId) document.getElementById('sheetTitle').textContent = 'Log a purchase';
+  }
+
+  function tripRowText(item) {
+    var parts = [];
+    parts.push('×' + item.quantity + (item.unit ? ' ' + item.unit : ''));
+    parts.push(item.location || 'no location');
+    parts.push(item.expiration_date ? 'expires ' + shortDate(isoToDate(item.expiration_date)) : 'no expiry');
+    return parts.join(' · ');
+  }
+
+  function showTripView() {
+    resetItemForm();
+    document.getElementById('itemSheet').hidden = false;
+    document.body.classList.add('sheet-open');
+    document.getElementById('itemForm').hidden = true;
+    document.getElementById('tripView').hidden = false;
+    document.getElementById('sheetTitle').textContent = 'This trip';
+    var list = document.getElementById('tripList');
+    var t = loadTrip();
+    list.textContent = '';
+    var empty = document.getElementById('tripEmpty');
+    empty.hidden = t.ids.length > 0;
+    // A trip begun before the list existed has a count but no ids.
+    empty.textContent = t.count ? 'Items saved before this list was added can\'t be shown. End the trip to start a new one.'
+      : 'Nothing saved this trip yet.';
+    if (!t.ids.length) return;
+    // Every status: something saved this trip may already be used up.
+    apiFetch('/items').then(function (items) {
+      var byId = {};
+      items.forEach(function (it) { byId[it.id] = it; });
+      list.textContent = '';
+      list.start = t.ids.length;
+      t.ids.slice().reverse().forEach(function (id, i) {
+        var item = byId[id];
+        var li = document.createElement('li');
+        li.value = t.ids.length - i;
+        if (!item) {
+          li.className = 'trip-row gone';
+          li.textContent = 'Deleted';
+          list.appendChild(li);
+          return;
+        }
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'trip-row';
+        var name = document.createElement('span');
+        name.className = 'trip-name';
+        name.textContent = item.name;
+        var detail = document.createElement('span');
+        detail.className = 'trip-detail';
+        detail.textContent = tripRowText(item);
+        b.appendChild(name);
+        b.appendChild(detail);
+        b.addEventListener('click', function () { startEdit(item, true); });
+        li.appendChild(b);
+        list.appendChild(li);
+      });
+    }).catch(function (err) { alert(err.message); });
+  }
+
+  document.getElementById('tripCount').addEventListener('click', showTripView);
+  document.getElementById('backToAddBtn').addEventListener('click', function () {
+    hideTripView();
+    resetItemForm();
+    document.getElementById('f-name').focus();
+  });
+  document.getElementById('endTripBtn').addEventListener('click', function () {
+    if (!window.confirm('End this trip? The items stay saved; the count starts again at 0.')) return;
+    try { localStorage.removeItem('trip'); } catch (e) {}
+    hideTripView();
+    resetItemForm();
   });
 
   // Save & scan next: a whole shopping trip goes in one after another.

@@ -491,7 +491,44 @@ body.sheet-open { overflow: hidden; }
   color: var(--accent-ink);
 }
 .card-foot .save-next-btn[hidden] { display: none; }
-.trip-count { font-size: 0.82rem; color: var(--muted); white-space: nowrap; }
+.card-form[hidden] { display: none; }
+/* "Trip: N saved" - tapping it opens the trip list. */
+.trip-count {
+  min-height: 36px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.trip-count[hidden] { display: none; }
+.trip-empty { color: var(--muted); margin: 8px 0; }
+.trip-list { margin: 0; padding: 0 0 0 2.2em; display: flex; flex-direction: column; gap: 8px; }
+.trip-list li::marker { color: var(--muted); font-size: 0.85rem; font-weight: 600; }
+.trip-row {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 12px;
+  min-height: 52px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+li.trip-row.gone { color: var(--muted); font-style: italic; }
+.trip-name { font-weight: 600; }
+.trip-detail { font-size: 0.82rem; color: var(--muted); }
 .card-input, .product-box input, .barcode-row input {
   font: inherit;
   font-size: 16px;
