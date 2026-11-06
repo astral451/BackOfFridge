@@ -6,6 +6,7 @@ const metaRouter = require('./routes/meta');
 const authRouter = require('./routes/auth');
 const householdRouter = require('./routes/household');
 const adminRouter = require('./routes/admin');
+const productsRouter = require('./routes/products');
 const auth = require('./auth');
 const { isActiveMember } = require('./permissions');
 const { log } = require('./logger');
@@ -64,6 +65,7 @@ function requireAdmin(req, res, next) {
 app.use('/api/admin', requireAdmin, adminRouter);
 app.use('/api/household', requireMember, householdRouter);
 app.use('/api/items', requireMember, itemsRouter);
+app.use('/api', requireMember, productsRouter);
 app.use('/api', requireMember, metaRouter);
 
 app.use(express.static(path.join(__dirname, '..', '..', 'public')));

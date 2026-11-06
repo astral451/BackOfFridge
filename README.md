@@ -255,6 +255,36 @@ pending accounts).
 Data from before households existed was moved into household #1, "Household
 1"; any member can rename it from Settings.
 
+### Barcode scanning
+
+The camera button (bottom bar, or **Scan** in the purchase form) opens the phone's
+own camera. The photo is uploaded and the barcode is read **on the server**
+(`zxing-wasm`, bundled in `node_modules` - nothing is downloaded at run time), so
+it works over plain HTTP and on any browser that can pick a photo. You can also
+type a barcode into the form, or use a USB/Bluetooth barcode scanner, which types
+the number and presses Enter.
+
+Barcodes your household has bought before are filled in from your own data.
+New ones are looked up on [Open Food Facts](https://world.openfoodfacts.org)
+(free, no key), so the server needs outbound HTTPS to `world.openfoodfacts.org`.
+Without it, scanning still works; you just type the name of a new product once.
+`OFF_BASE_URL` overrides the lookup host (the tests use it).
+
+**Items entered before you scanned them.** When Open Food Facts names a new
+barcode ("Sparkling Water Melon Medley") and you've entered something
+similar without a barcode ("Melon medley waterloon", maybe dictated), the
+form asks *Same as your "Melon medley waterloon"?* Answering **Yes, use my
+name** gives this barcode to every earlier item with that name. It also
+fills the form with your name, location, unit and quantity from the latest
+one, and scanning the barcode brings those back from then on. **No, it's
+new** just hides the question. Matching compares words, so it allows for
+word order, plurals and a misheard word. It only ever suggests: nothing is
+renamed or linked unless you say yes.
+
+Once linked, the barcode is how the app knows a product, whatever each
+item was called. Items without one (never scanned, or nothing to scan,
+like farmers-market fruit) are known by their name.
+
 ### Reaching it from your phone / Supernote away from home
 
 The container only listens on the port you expose; it doesn't set up remote access.
@@ -353,13 +383,16 @@ for ids that don't exist.
 | GET | `/api/auth/me` | Currently logged-in user: `{ username, status, isAdmin, household }`, or 401 if not logged in |
 | GET | `/api/items` | List items. Filters: `status`, `location`, `category`, `expiring_within_days` |
 | GET | `/api/items/:id` | Get one item |
-| POST | `/api/items` | Log a purchase (`name` required; `category`, `location`, `quantity`, `unit`, `purchase_date`, `expiration_date`, `notes` optional) |
+| POST | `/api/items` | Log a purchase (`name` required; `category`, `location`, `quantity`, `unit`, `purchase_date`, `expiration_date`, `notes`, `barcode` optional). A `barcode` is remembered, so scanning it again pre-fills this item's name, location, tag, unit, quantity and tracking mode |
 | PATCH | `/api/items/:id` | Update any field |
 | POST | `/api/items/:id/throw-out` | Throw out some or all of an item. Body `{ quantity? }` — omit to throw out everything remaining, or pass a number to remove just that many (item stays `active` with the reduced quantity) |
 | POST | `/api/items/:id/consume` | Same as above, but marks it `consumed` instead of `thrown_out` |
 | POST | `/api/items/:id/undo` | Reverse the most recent throw-out/consume call on this item (one level of undo) |
 | GET | `/api/items/:id/history` | This item's recorded events (purchased, consumed, thrown_out, edited, fill_level_set, undo, deleted), newest first |
 | DELETE | `/api/items/:id` | Remove an item |
+| POST | `/api/scan` | Read the barcode in a photo. Body: the raw image bytes (JPEG/PNG; any image `Content-Type`, up to 25MB). Returns `{ barcode, expiration_date, codes, product, lookup_error }` (see `server/src/routes/products.js`). 422 if no barcode is found, 415 for a HEIC photo |
+| GET | `/api/products/:barcode` | Same answer for a typed barcode (8, 12, 13 or 14 digits). Looks in this household's own products first, then Open Food Facts (cached). Both also return `matches`: for a product only Open Food Facts knows, up to 3 names this household entered without a barcode that look similar, `[{ name, count, last_bought }]` |
+| POST | `/api/products/:barcode/link` | "Same as my ...": body `{ name }`. Gives the barcode to this household's items with that name (ignoring case) that have none, and makes the latest one what the barcode pre-fills. Same answer shape, plus `linked` (how many items). 404 if no such name |
 | GET | `/api/locations` | Managed location names, for the purchase form/filter dropdowns |
 | GET | `/api/locations/detail` | Locations with a count of items currently referencing each, for the manage-locations page |
 | POST | `/api/locations` | Add a new location. Body `{ name }` |

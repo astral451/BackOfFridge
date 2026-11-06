@@ -376,6 +376,13 @@
     and confirming the tests fail. Plus a Playwright pass of signup (both
     code kinds and a bad code), pending, admin approve, settings rename and
     the existing pages at 390px and 1000px.
+- **Barcode scanning** (2026-11-06): photo or typed/wedge-scanner barcode,
+  decoded on the server, looked up in the household's own products and then
+  Open Food Facts. It fills name, Qty and Unit (from the package size), and
+  links a new barcode to earlier items entered by name ("Same as your
+  ...?"). Within a household, the barcode is a product's identity, and
+  items without one go by name. Details in the Roadmap entry "Barcode/visual
+  scanning".
 
 ## Roadmap
 
@@ -384,9 +391,81 @@ priority — a Low item isn't necessarily more worth doing than a High one.
 
 - **Location customization** — shipped: locations (and tags) are a managed
   list with add/delete, each household with its own.
-- **Barcode/visual scanning (Medium)** — scan a barcode to quickly re-up an
-  item instead of retyping it (builds on "Buy again"). Its pre-filled
-  quantity depends on step 1 of "Quantity model" below.
+- **Barcode/visual scanning (Medium)** — shipped 2026-11-06 (tested on
+  the server from branch `claude/barcode-scanning` first, including the
+  name matching and package-size additions below). Scan a
+  barcode to quickly re-up an item instead of retyping it (builds on "Buy
+  again"); its pre-filled quantity uses step 1 of "Quantity model" below.
+
+  What was built, following the design below:
+  - Camera button in the bottom bar (opens a fresh form straight to the
+    camera) and a barcode field + **Scan** button at the top of the
+    purchase form. The photo goes to `POST /api/scan` as raw image bytes
+    (`express.raw`, no `multer` needed); typed or wedge-scanner barcodes go
+    to `GET /api/products/:barcode`. Enter in the barcode field looks it up
+    instead of submitting the form.
+  - `server/src/barcode.js`: decoding (zxing-wasm reader, wasm loaded from
+    `node_modules`), HEIC detection, and normalisation: UPC-A, EAN-13 and
+    GTIN-14 all become one 13-digit key; UPC-E is expanded; GS1 Digital
+    Link QR codes and GS1 element strings (DataMatrix) give the GTIN and
+    the expiry date (AI 17), which fills in Expires.
+  - `server/src/openfoodfacts.js` + `server/src/routes/products.js`:
+    lookup order is this household's products, then Open Food Facts,
+    cached. A result found there fills the name and shows brand/package.
+    An unknown barcode, or Open Food Facts being unreachable, still keeps
+    the barcode, so the name only has to be typed once.
+  - Migration 005: `items.barcode` and the per-household `products` table.
+    Buying with a barcode (or adding one to an item through Edit) saves
+    that household's name, location, tag, unit, quantity and tracking mode
+    for it, so the next scan pre-fills all of it ("Bought before").
+  - **Linking earlier names to a barcode** (added after the first round
+    of testing on the server). A household that typed or dictated
+    "Melon medley waterloon" before scanning got "Sparkling Water Melon
+    Medley" from Open Food Facts on the first scan, with no link between
+    them.
+    - When a lookup's product came from Open Food Facts, it also returns
+      `matches`: this household's barcode-less names that look alike
+      (`server/src/namematch.js`). Up to 3 are returned; one per name,
+      ignoring case.
+    - The match compares words: lowercase, punctuation and filler words
+      dropped, plural "s" trimmed. Words also match when one starts with
+      the other and the shorter has 4+ letters, so a misheard "waterloon"
+      meets "water". It scores shared / all distinct words, and also
+      tries brand + name. Suggested at a score of 0.4 or more.
+    - The form asks *Same as your "..."?* **Yes, use my name** calls
+      `POST /api/products/:barcode/link { name }`. That gives the barcode
+      to every item of that name (any status, so history counts too),
+      records an `edited` event on each, and saves the latest one's
+      choices as the barcode's local product. The form then fills like a
+      "Bought before" scan. **No** just hides the question. Nothing is
+      renamed or linked without a yes.
+  - **Package size into Qty and Unit** (also from testing on the server:
+    the status line showed the size but the form didn't use it).
+    `parsePackage` in `server/src/openfoodfacts.js` reads Open Food
+    Facts' free-text `quantity` the way quick add treats "two, 24 ounces":
+    Unit = the size of each, Qty = how many when the pack says so.
+    - `330 ml` → Unit 330 ml; `12 x 12 fl oz` → Qty 12, Unit 12 fl oz.
+    - `18 oz (510 g)` → 18 oz; `400 g e` → 400 g (the EU estimated
+      sign); `12 cans` → Qty 12, Unit cans.
+    - Text without a number gives nothing.
+    - It's applied in `productView` for Open Food Facts rows, so
+      products cached before this change get it too.
+    - The form only fills Unit when it's empty, and Qty when it's still
+      1. A product the household has bought before keeps its own unit
+      and quantity.
+  - **Product identity, for sorting and counting** (e.g. a future "what
+    we buy most"): within a household, the barcode, when an item has one,
+    is the product's identity, whatever each item is called. Items
+    without one (not scanned yet, or nothing to scan, like
+    farmers-market fruit) are identified by name, ignoring case and
+    surrounding spaces. In SQL: group by
+    `COALESCE(barcode, 'name:' || LOWER(TRIM(name)))`. Linking is what
+    keeps earlier dictated entries in the same group as later scans.
+    - Caveat: one product in two package sizes has two barcodes (a
+      single can and a 12-pack). If they should count together, link both
+      to the same name and group by the products table's name instead.
+  - Not built yet: the live camera viewfinder (needs HTTPS), and the
+    optional vision-model step for barcode-less items.
 
   **Direction chosen: server-side decoding, no on-device scanning library.**
   The browser only captures; the server decodes and looks up.
@@ -437,6 +516,66 @@ priority — a Low item isn't necessarily more worth doing than a High one.
   - **Later, optional:** send the same uploaded photo to a vision model to
     identify barcode-less items (produce) or read a printed "best by" date.
     This needs an API key and costs per call, so it's phase 2.
+- **Quick entry card: one form for adding and editing (Medium)** —
+  designed, being built next (scanning has shipped, so this starts from
+  the known interface). Clickable mockups:
+  https://claude.ai/artifact/JPGBHKB7F1ujrPWv6KbgpK (private to the user).
+
+  The purchase sheet is replaced by a compact card that fits one phone
+  screen. Every way in uses it, differing only in what's pre-filled: a
+  scan (product bought before, or found on Open Food Facts), **+**, "Buy
+  again", and Edit. The card holds:
+  - Name (with brand/size from the lookup), and a **quantity stepper**
+    (− / number / +, tap the number to type) right under it.
+  - **Where:** square tiles (about 80×64 px, long names wrap to two lines)
+    in two rows that scroll sideways, since households have 10+
+    locations. **Tiles never reorder**: tapping or preselecting one leaves
+    it where it is (moving it was jarring). The line beside the heading
+    names the selection, since a preselected tile may be off-screen. The
+    build should scroll the row to show it, not reorder. Preselected:
+    last time's location for a product bought before, else the location
+    used for the previous item this trip.
+  - **Expires**, with two tabs:
+    - *Approx:* chips 3 days / 1 wk / 2 wk / 4 wk / 3 mo / 6 mo / 1 yr /
+      None. Each chip shows the date it sets, worked out from today, and a
+      line above repeats the full date and "in N days".
+    - *Exact date:* three taps, month grid → day grid → year. The likely
+      year (the next time that month and day comes round) is highlighted
+      so the third tap is a quick confirm. The chosen steps show as small
+      buttons (Nov › 19 › 2026) that jump back to that step. A date in
+      the past shows a warning.
+    - Perishable items open on Exact date, non-perishable on Approx.
+      Exact dates matter for meat and milk; approximate is fine for
+      shelf-stable food.
+  - **Or say it:** a text field with a mic, below the date picker (scroll
+    to it), feeding the existing quick-add reader to fill in location and
+    date.
+  - "More details" opens in place with unit, category, tag, purchase date,
+    notes and fill level.
+  - **Save & scan next** is the main button, because a whole shopping trip
+    is usually entered at once. On iOS the camera can only open in
+    response to a tap, so this button's tap opens it. A plain **Save**
+    sits beside it, and the header counts items saved this trip.
+
+  Decisions (2026-11-05):
+  - **Typing an item in (+):** the name field comes first, with
+    suggestions from this household's products. Done, or picking a
+    suggestion, closes the keyboard so the whole card is visible; a
+    suggestion fills in the card like a scan of that product would.
+  - **Category for a new item:** for scans, guess from the Open Food
+    Facts `food_groups_tags` field (meat, fish, milk/dairy → perishable;
+    anything also tagged `en:canned-foods` → non-perishable). Otherwise
+    default to non-perishable. Whatever is saved is remembered on the
+    product. `categories_tags` is too messy to use (user-entered
+    duplicates and misspellings); `food_groups_tags` is clean. Checked
+    live: Cheerios → breakfast-cereals, Nutella → sugary-snacks,
+    Progresso soup → one-dish-meals plus canned-foods. This means adding
+    `food_groups_tags,categories_tags` to the lookup's `fields=`.
+  - **Quick add stays** as the fastest one-line entry without a form; the
+    card's voice field uses the same reader underneath.
+  - **Edit** opens on Exact date with the item's current date selected,
+    or, with no date, on the tab that matches its category.
+  - Both the light and dark themes.
 - **Quantity model: purchased amount and per-unit fill level (Low → Medium,
   two steps)** — two related fixes to what an item's `quantity` means,
   planned together but built in order. Step 1 is small, fixes a bug in use

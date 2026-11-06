@@ -66,6 +66,7 @@
           <form id="quickAddForm">
             <input type="text" id="quickAddInput" placeholder="Quick add… milk, 1 gallon, fridge, dairy (tap the mic to dictate)">
           </form>
+          <button type="button" id="scanBarBtn" class="secondary" aria-label="Scan a barcode" title="Scan a barcode"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
           <button type="button" id="openSheetBtn" aria-label="Add item">+</button>
         </div>
 
@@ -77,6 +78,14 @@
         <h2>Log a purchase</h2>
         <form id="itemForm">
           <div class="form-grid compact">
+            <div class="barcode-row full">
+              <input type="text" id="f-barcode" placeholder="Barcode (type or scan)" inputmode="numeric" autocomplete="off" aria-label="Barcode">
+              <button type="button" id="scanBtn" class="scan-btn"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg> Scan</button>
+              <!-- Opens the phone's own camera; the photo is read on the server. -->
+              <input type="file" id="f-scan-file" accept="image/*" capture="environment" class="offscreen" tabindex="-1" aria-hidden="true">
+            </div>
+            <div id="scanStatus" class="scan-status full" role="status" hidden></div>
+            <div id="scanMatch" class="scan-match full" hidden></div>
             <input type="text" id="f-name" placeholder="Item name" required class="full">
             <input type="number" id="f-quantity" placeholder="Qty" step="any" value="1">
             <input type="text" id="f-unit" placeholder="Unit (oz, lbs, count...)">
