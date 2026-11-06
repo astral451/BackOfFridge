@@ -959,6 +959,29 @@
   // Builds the "⋯" menu of secondary actions for one row - everything that
   // used to be a row of buttons (throw out/consume/undo/edit/track mode/
   // buy again/delete), now tucked away so the row itself stays compact.
+  // A short message at the bottom of the screen that fades by itself.
+  var toastTimer = null;
+  function showToast(text) {
+    var el = document.getElementById('toast');
+    el.textContent = text;
+    el.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.hidden = true; }, 3000);
+  }
+
+  // From an item's menu: onto the household's shopping list (list.html),
+  // under its barcode too, so scanning it in the store ticks it off.
+  function addToShoppingList(item) {
+    apiFetch('/trips/list/entries', {
+      method: 'POST',
+      body: JSON.stringify({ name: item.name, barcode: item.barcode || null, source: 'manual' }),
+    }).then(function (entry) {
+      showToast(entry.added
+        ? 'Added "' + item.name + '" to the shopping list.'
+        : '"' + item.name + '" is already on the shopping list.');
+    }).catch(function (err) { alert(err.message); });
+  }
+
   function buildOverflowMenu(item, row) {
     var menu = document.createElement('div');
     menu.className = 'overflow-menu';
@@ -1028,6 +1051,7 @@
       });
     }
     addAction('Buy again', function () { fillFormFromItem(item); });
+    addAction('Add to shopping list', function () { addToShoppingList(item); });
     addAction('Delete', function () {
       if (confirm('Delete "' + item.name + '"?')) {
         apiFetch('/items/' + item.id, { method: 'DELETE' }).then(refresh);

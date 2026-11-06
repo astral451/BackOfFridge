@@ -1011,3 +1011,21 @@ body:has(.bottombar) { padding-bottom: 84px; } /* room for the fixed bottom bar 
 .member-row select { max-width: 150px; padding: 4px 6px; }
 .user-row { flex-direction: column; align-items: flex-start; gap: 6px; }
 .user-row .admin-controls select { max-width: 150px; padding: 4px 6px; }
+
+/* ---------- toast: a short message that fades by itself ---------- */
+.toast {
+  position: fixed;
+  left: 16px; right: 16px;
+  bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+  z-index: 50;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 0.9rem;
+  box-shadow: 0 8px 24px -8px var(--shadow);
+}
+.toast[hidden] { display: none; }
+@media (min-width: 720px) { .toast { bottom: 24px; } }

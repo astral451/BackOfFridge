@@ -727,6 +727,9 @@ priority — a Low item isn't necessarily more worth doing than a High one.
     get". Routes: `GET /api/trips/list`, `POST /api/trips/list/entries`,
     `PATCH`/`DELETE /api/trips/entries/:id`, `POST
     /api/trips/entries/:id/tick`, `POST /api/trips/:id/start`.
+    **Add to shopping list** in each item's ⋯ menu on the main page (the
+    user's idea, 2026-11-06) adds it with its barcode, so a scan in the
+    store ticks it off; a toast says added, or already on the list.
     Not yet: the near-match question ("Is this the 2% milk on your
     list?"); name suggestions while typing on the list.
 

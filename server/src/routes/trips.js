@@ -117,7 +117,7 @@ router.post('/list/entries', requirePermission('items:write'), (req, res) => {
     source: req.body.source,
   }, req.username);
   if (added) log(`LISTED "${name}" by ${req.username} (household ${req.householdId})`);
-  res.status(added ? 201 : 200).json(entry);
+  res.status(added ? 201 : 200).json({ ...entry, added });
 });
 
 // PATCH /api/trips/entries/:id - body { quantity, unit } on a list row.

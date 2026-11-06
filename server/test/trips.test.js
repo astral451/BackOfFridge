@@ -168,6 +168,8 @@ test('adding to the list: starts it, no duplicates, and leaves the suggestions',
   const again = await addToList({ name: ' coffee ' });
   assert.strictEqual(again.status, 200);
   assert.strictEqual(again.body.id, a.body.id);
+  assert.strictEqual(a.body.added, true);
+  assert.strictEqual(again.body.added, false);
   const eggs = await addToList({ name: 'Eggs', quantity: 12 });
   assert.strictEqual(eggs.body.quantity, 12);
   assert.strictEqual((await addToList({ name: 'X', quantity: -1 })).status, 400);
