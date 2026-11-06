@@ -376,6 +376,13 @@
     and confirming the tests fail. Plus a Playwright pass of signup (both
     code kinds and a bad code), pending, admin approve, settings rename and
     the existing pages at 390px and 1000px.
+- **Barcode scanning** (2026-11-06): photo or typed/wedge-scanner barcode,
+  decoded on the server, looked up in the household's own products and then
+  Open Food Facts. It fills name, Qty and Unit (from the package size), and
+  links a new barcode to earlier items entered by name ("Same as your
+  ...?"). Within a household, the barcode is a product's identity, and
+  items without one go by name. Details in the Roadmap entry "Barcode/visual
+  scanning".
 
 ## Roadmap
 
@@ -384,8 +391,9 @@ priority — a Low item isn't necessarily more worth doing than a High one.
 
 - **Location customization** — shipped: locations (and tags) are a managed
   list with add/delete, each household with its own.
-- **Barcode/visual scanning (Medium)** — built on branch
-  `claude/barcode-scanning`, being tested before it goes to main. Scan a
+- **Barcode/visual scanning (Medium)** — shipped 2026-11-06 (tested on
+  the server from branch `claude/barcode-scanning` first, including the
+  name matching and package-size additions below). Scan a
   barcode to quickly re-up an item instead of retyping it (builds on "Buy
   again"); its pre-filled quantity uses step 1 of "Quantity model" below.
 
@@ -509,8 +517,8 @@ priority — a Low item isn't necessarily more worth doing than a High one.
     identify barcode-less items (produce) or read a printed "best by" date.
     This needs an API key and costs per call, so it's phase 2.
 - **Quick entry card: one form for adding and editing (Medium)** —
-  designed, not built. **Waits until barcode scanning is tested and merged**
-  so scanning ships on the known interface first. Clickable mockups:
+  designed, being built next (scanning has shipped, so this starts from
+  the known interface). Clickable mockups:
   https://claude.ai/artifact/JPGBHKB7F1ujrPWv6KbgpK (private to the user).
 
   The purchase sheet is replaced by a compact card that fits one phone
