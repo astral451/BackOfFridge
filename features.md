@@ -733,6 +733,36 @@ priority — a Low item isn't necessarily more worth doing than a High one.
     Not yet: the near-match question ("Is this the 2% milk on your
     list?"); name suggestions while typing on the list.
 
+  **Next: the Lists page (designed 2026-11-06).** Mockups: the second
+  row of https://claude.ai/artifact/JPGBHKB7F1ujrPWv6KbgpK. One place
+  to see every list, rather than only reaching them by adding or
+  scanning.
+  - *Main page:* "Lists" first in the header (replacing "Shopping
+    list"; "Manage locations/tags" shorten to "Locations/Tags"). While
+    a trip is going, a "Shopping now · 8 saved · 3 still to get · with
+    alex" banner above the items, **shown to everyone in the household**
+    and opening the trip.
+  - *Lists page:* **Shopping now** (the active trip: started when, who,
+    progress through the list, what's still to get, Open trip / End
+    trip, and an **"Add to this trip"** box so someone at home can add
+    what they remember); **Shopping list** (count, first few things,
+    suggestions waiting, Open list / Start shopping); **Past trips**
+    (date, how many got, time span, who, an amber "N not found" tag).
+  - *Shopper's notice:* when someone else adds to the trip, the
+    shopper's screen shows **"New item added: Bread · alex added it
+    from home"**, and the new row is highlighted in Still to get. (Pages
+    already re-read the trip every 10 s while open; the main page and
+    the card would also check while a trip is going.)
+  - *A past trip:* the trip page's format, read-only. **Not found** (list
+    rows never ticked) with **"Put them on the shopping list"**: only on
+    that tap, not automatically. **Got**, numbered, newest first, each
+    row able to fix its name: "Same as your "2% milk"? Yes, rename"
+    (trips step 2).
+  - *Suggestions* on the shopping list gain a fourth group, **Often
+    used**: the products used up most often (say the last 90 days).
+  - Not doing: "Buy these again" for a whole trip. Shopping doesn't
+    repeat week to week; low stock, used up and often used cover it.
+
   **Decided (2026-11-06):**
   - **One list at a time**, but each trip has its own UUID so several
     could be supported later. One big list is how the user shops: what's
