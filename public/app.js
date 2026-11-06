@@ -1628,17 +1628,23 @@
     if (payload.location) rememberLocation(payload.location);
     renderTripCount();
   }
+  // "Trip: 3 saved", plus "· 5 to get" while there's shopping-list left.
   function renderTripCount() {
     var el = document.getElementById('tripCount');
     var n = currentTrip ? currentTrip.count : 0;
-    el.textContent = 'Trip: ' + n + ' saved';
-    el.hidden = !n;
+    var todo = currentTrip ? currentTrip.todo || 0 : 0;
+    el.textContent = 'Trip: ' + n + ' saved' + (todo ? ' · ' + todo + ' to get' : '');
+    el.hidden = !n && !todo;
   }
   // Reads the household's current trip (someone else may have added to
   // it, or ended it). Resolves with the full trip, or null.
   function loadCurrentTrip() {
     return apiFetch('/trips/current').then(function (r) {
-      currentTrip = r.trip ? { id: r.trip.id, count: r.trip.count } : null;
+      currentTrip = r.trip ? {
+        id: r.trip.id,
+        count: r.trip.count,
+        todo: r.trip.entries.filter(function (e) { return !e.bought_at; }).length,
+      } : null;
       renderTripCount();
       return r.trip;
     });
@@ -2039,6 +2045,7 @@
     return apiFetch('/items', { method: 'POST', body: JSON.stringify(body) }).then(function (item) {
       noteTripSave(payload, item);
       refresh();
+      return item;
     });
   }
 
@@ -2088,35 +2095,87 @@
     return parts.join(' · ');
   }
 
+  function tickEntry(entry, ticked) {
+    apiFetch('/trips/entries/' + entry.id + '/tick', { method: 'POST', body: JSON.stringify({ ticked: ticked }) })
+      .then(function () { lastTripJSON = ''; readTrip(); })
+      .catch(function (err) { alert(err.message); });
+  }
+
+  function rowParts(button, name, detail) {
+    var n = document.createElement('span');
+    n.className = 'trip-name';
+    n.textContent = name;
+    var d = document.createElement('span');
+    d.className = 'trip-detail';
+    d.textContent = detail;
+    button.appendChild(n);
+    button.appendChild(d);
+  }
+
+  // The trip page: "Still to get" (list rows not got yet) at the top, then
+  // everything got, newest first, numbered in the order it went in.
   function renderTripList(trip) {
     var json = JSON.stringify(trip);
     if (json === lastTripJSON) return;
     lastTripJSON = json;
-    var list = document.getElementById('tripList');
-    var bought = trip ? trip.entries.filter(function (e) { return e.bought_at; }) : [];
-    list.textContent = '';
-    document.getElementById('tripEmpty').hidden = bought.length > 0;
+    var entries = trip ? trip.entries : [];
+    var todo = entries.filter(function (e) { return !e.bought_at; });
+    var bought = entries.filter(function (e) { return e.bought_at; });
+    document.getElementById('tripEmpty').hidden = entries.length > 0;
     document.getElementById('endTripBtn').disabled = !trip;
     // Who added each item, once more than one person has.
     var people = {};
     bought.forEach(function (e) { if (e.added_by) people[e.added_by] = true; });
     var showWho = Object.keys(people).length > 1;
+
+    var todoBox = document.getElementById('tripTodo');
+    var todoList = document.getElementById('tripTodoList');
+    todoList.textContent = '';
+    todoBox.hidden = !todo.length;
+    document.getElementById('tripTodoCount').textContent = todo.length ? String(todo.length) : '';
+    todo.forEach(function (entry) {
+      var li = document.createElement('li');
+      li.className = 'list-row';
+      var info = document.createElement('div');
+      info.className = 'trip-row static';
+      rowParts(info, entry.name, entry.quantity != null
+        ? '×' + entry.quantity + (entry.unit ? ' ' + entry.unit : '') : (entry.unit || 'saving it ticks it off'));
+      // Got it, but nothing to save (or saving it later): tick by hand.
+      var tick = document.createElement('button');
+      tick.type = 'button';
+      tick.className = 'row-icon-btn tick-btn';
+      tick.textContent = '✓';
+      tick.setAttribute('aria-label', 'Got ' + entry.name);
+      tick.addEventListener('click', function () { tickEntry(entry, true); });
+      li.appendChild(info);
+      li.appendChild(tick);
+      todoList.appendChild(li);
+    });
+
+    document.getElementById('tripGotHead').hidden = !(todo.length || bought.some(function (e) { return e.source; })) || !bought.length;
+    var list = document.getElementById('tripList');
+    list.textContent = '';
     bought.forEach(function (entry, i) {
       var li = document.createElement('li');
       li.value = bought.length - i;
       var b = document.createElement('button');
       b.type = 'button';
-      b.className = 'trip-row' + (entry.deleted ? ' gone' : '');
-      var name = document.createElement('span');
-      name.className = 'trip-name';
-      name.textContent = entry.name;
-      var detail = document.createElement('span');
-      detail.className = 'trip-detail';
-      detail.textContent = entry.deleted ? 'Deleted' : tripRowText(entry, showWho);
-      b.appendChild(name);
-      b.appendChild(detail);
-      if (entry.deleted) b.disabled = true;
-      else b.addEventListener('click', function () { editTripItem(entry.item_id); });
+      b.className = 'trip-row';
+      if (entry.item_id == null) {
+        // Ticked off the list by hand: tap to put it back.
+        b.className += ' ticked';
+        rowParts(b, entry.name, 'ticked off by hand · tap to undo');
+        b.addEventListener('click', function () { tickEntry(entry, false); });
+      } else if (entry.deleted) {
+        b.className += ' gone';
+        b.disabled = true;
+        rowParts(b, entry.name, 'Deleted');
+      } else {
+        var detail = tripRowText(entry, showWho);
+        if (entry.source) detail += ' · ✓ from the list';
+        rowParts(b, entry.name, detail);
+        b.addEventListener('click', function () { editTripItem(entry.item_id); });
+      }
       li.appendChild(b);
       list.appendChild(li);
     });
@@ -2174,9 +2233,11 @@
     resetItemForm();
     setFormLocation(payload.location, payload.location ? 'last item' : null);
     setScanStatus('Saving ' + payload.name + '…');
-    postItem(payload).then(function () {
+    postItem(payload).then(function (item) {
       if (document.getElementById('scanStatus').textContent.indexOf('Saving ') === 0) {
-        setScanStatus('Saved: ' + describePayload(payload) + '.', 'found');
+        var ticked = item && item.trip && item.trip.ticked;
+        setScanStatus('Saved: ' + describePayload(payload) + '.'
+          + (ticked ? ' ✓ Ticked "' + ticked + '" off the list.' : ''), 'found');
       }
     }).catch(function (err) {
       if (!document.getElementById('f-name').value.trim()) {
@@ -2274,4 +2335,9 @@
   loadWhoAmI();
   refresh();
   loadCurrentTrip().catch(function () {});
+  // "Start shopping" on the shopping list lands here.
+  if (window.location.hash === '#trip') {
+    history.replaceState(null, '', window.location.pathname);
+    showTripView();
+  }
 })();

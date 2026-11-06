@@ -285,3 +285,5 @@ router.delete('/:id', requirePermission('items:write'), (req, res) => {
 });
 
 module.exports = router;
+// The low_stock flag, for the shopping list's suggestions.
+module.exports.serialize = serialize;

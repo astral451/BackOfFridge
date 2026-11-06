@@ -22,6 +22,7 @@
   <header>
     <h1>BackOfFridge</h1>
     <div id="stats" class="stats"></div>
+    <a href="list.html">Shopping list</a>
     <a href="glance.html">At a glance</a>
     <a href="locations.html">Manage locations</a>
     <a href="tags.html">Manage tags</a>
@@ -170,6 +171,12 @@
         <div id="tripView" class="card-form" hidden>
           <div class="card-body">
             <p id="tripEmpty" class="trip-empty" hidden>Nothing saved this trip yet.</p>
+            <!-- From the shopping list: not got yet. -->
+            <section id="tripTodo" class="card-section" hidden>
+              <h3 class="trip-subhead">Still to get <span id="tripTodoCount" class="section-hint"></span></h3>
+              <ul id="tripTodoList" class="plain-rows"></ul>
+            </section>
+            <h3 id="tripGotHead" class="trip-subhead" hidden>Got</h3>
             <ol id="tripList" class="trip-list" reversed></ol>
           </div>
           <div class="card-foot">

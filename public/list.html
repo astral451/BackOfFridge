@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<script>
+// See index.html for why this runs inline, before the stylesheet.
+(function () {
+  try {
+    var t = localStorage.getItem('theme');
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+  } catch (e) {}
+})();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BackOfFridge - Shopping list</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body class="with-page-foot">
+  <header>
+    <h1>Shopping list</h1>
+    <a href="index.html">&larr; Back to inventory</a>
+    <span id="whoami" class="stats"></span>
+    <button id="logoutBtn" class="small">Log out</button>
+  </header>
+
+  <main id="app" class="list-page">
+    <form id="addForm" class="list-add">
+      <input type="text" id="addName" placeholder="Add something…" autocomplete="off" aria-label="Item to add">
+      <input type="text" id="addQty" placeholder="Qty" inputmode="decimal" autocomplete="off" aria-label="Quantity (optional)">
+      <button type="submit">Add</button>
+    </form>
+
+    <section class="card-section" aria-labelledby="onListHeading">
+      <div class="section-head">
+        <h3 id="onListHeading">On the list</h3>
+        <span id="onListCount" class="section-hint"></span>
+      </div>
+      <p id="listEmpty" class="trip-empty">Nothing yet. Add things above, or from the suggestions below.</p>
+      <ul id="listRows" class="plain-rows"></ul>
+    </section>
+
+    <section class="card-section" aria-labelledby="suggestHeading">
+      <div class="section-head">
+        <h3 id="suggestHeading">Things you might want</h3>
+      </div>
+      <p id="suggestEmpty" class="trip-empty" hidden>Nothing to suggest right now.</p>
+      <div id="suggestGroups"></div>
+    </section>
+  </main>
+
+  <div class="page-foot">
+    <button type="button" id="startBtn" class="save-next-btn" disabled>Start shopping</button>
+  </div>
+
+  <script src="list.js"></script>
+</body>
+</html>

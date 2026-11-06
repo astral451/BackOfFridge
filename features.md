@@ -711,6 +711,24 @@ priority — a Low item isn't necessarily more worth doing than a High one.
     hours, checked whenever the trip is read. "Same as the last item"
     stays per phone (localStorage `lastLocation`), since two people may
     unpack into different rooms. The old per-phone trip is removed.
+  - **Steps 3 and 4 built (2026-11-06): the shopping list.** `list.html`
+    / `list.js`, linked from the main page's header. The list is the
+    household's one `planned` trip. "Things you might want" in three
+    groups: Used up lately (consumed or thrown out in 14 days, none
+    left), Low stock (`low_stock`), Expiring soon (3 days, or past); a
+    product shows once and not if it's already listed. Add by name with
+    an optional quantity ("2 bags"); tap a row to change it, ✕ to remove.
+    **Start shopping** makes it the active trip (or, if a trip is already
+    going, moves its rows into that one) and opens the trip page. Saving
+    an item whose barcode or name (ignoring case) matches a list row
+    ticks that row (the card says so); ✓ ticks one by hand, and tapping
+    a hand-ticked row undoes it. The trip page shows "Still to get" at
+    the top, then "Got"; the card's header shows "Trip: N saved · M to
+    get". Routes: `GET /api/trips/list`, `POST /api/trips/list/entries`,
+    `PATCH`/`DELETE /api/trips/entries/:id`, `POST
+    /api/trips/entries/:id/tick`, `POST /api/trips/:id/start`.
+    Not yet: the near-match question ("Is this the 2% milk on your
+    list?"); name suggestions while typing on the list.
 
   **Decided (2026-11-06):**
   - **One list at a time**, but each trip has its own UUID so several

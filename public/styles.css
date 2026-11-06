@@ -528,6 +528,57 @@ body.sheet-open { overflow: hidden; }
 }
 .trip-row.gone { color: var(--muted); font-style: italic; cursor: default; }
 .trip-name { font-weight: 600; }
+.trip-row.static { cursor: default; }
+.trip-row.ticked .trip-name { text-decoration: line-through; color: var(--muted); }
+
+/* Rows with a button on the right: the shopping list, its suggestions,
+   and "Still to get" on the trip page. */
+.plain-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.list-row { display: flex; gap: 8px; align-items: stretch; }
+.list-row .trip-row { flex: 1; min-width: 0; }
+.row-icon-btn, .row-add-btn {
+  flex: 0 0 auto;
+  min-width: 52px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.row-add-btn { color: var(--accent); border-color: var(--accent); padding: 0 12px; }
+.row-add-btn:disabled { opacity: 0.5; }
+.tick-btn { font-size: 1.2rem; }
+.suggest-head { margin: 6px 0 2px; font-size: 0.82rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.trip-subhead { margin: 0; font-family: "Libre Franklin", sans-serif; font-size: 0.95rem; }
+
+/* The shopping list page. */
+.list-page { display: flex; flex-direction: column; gap: 16px; max-width: 560px; }
+.list-add { display: flex; gap: 8px; }
+.list-add input {
+  font: inherit; font-size: 16px; min-height: 44px; padding: 8px 10px;
+  border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--text);
+}
+#addName { flex: 1; min-width: 0; }
+#addQty { width: 72px; flex: 0 0 auto; }
+.list-add button {
+  min-height: 44px; padding: 0 16px; border-radius: 10px; border: none;
+  background: var(--accent); color: var(--accent-ink); font: inherit; font-weight: 700; cursor: pointer;
+}
+.page-foot {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+  display: flex;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+.page-foot .save-next-btn {
+  flex: 1; max-width: 560px; min-height: 52px; border-radius: 12px; border: none;
+  background: var(--accent); color: var(--accent-ink); font: inherit; font-size: 1rem; font-weight: 600; cursor: pointer;
+}
+.page-foot .save-next-btn:disabled { opacity: 0.5; cursor: default; }
+body.with-page-foot { padding-bottom: 96px; }
 .trip-detail { font-size: 0.82rem; color: var(--muted); }
 .card-input, .product-box input, .barcode-row input {
   font: inherit;
