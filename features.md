@@ -623,6 +623,28 @@ priority — a Low item isn't necessarily more worth doing than a High one.
   - **Edit** opens on Exact date with the item's current date selected,
     or, with no date, on the tab that matches its category.
   - Both the light and dark themes.
+- **Trip list as its own place: corrections after unpacking, and a
+  shopping list (Medium; ideas from the user, 2026-11-06, not designed
+  yet)** — builds on the trip list (see "Quick entry card", Progress).
+  The user sees the trip list as separate from the inventory: a record of
+  one shopping run, in the order things went in, that the same visual
+  format can serve twice.
+  - *Correcting after putting things away:* "oh, I already had one of
+    these". The trip list is where that gets fixed, after the fact.
+    Open question: what the fix does. Possibly fold the new purchase
+    into the existing item (quantities add; but the two may have
+    different expiry dates), or link it to an existing product the
+    household entered under another name (like the scan's "Same as
+    your ...?" question, but later), or just delete the duplicate.
+  - *Shopping list from what's been used:* the same kind of list, built
+    from what was consumed or thrown out recently (and low stock), as
+    the start of "what we need". `item_events` already records each
+    `consumed` / `thrown_out` with a time, and the "catch-up burst" note
+    below applies when reading it. A natural link: a trip that saves a
+    listed item ticks it off.
+  - Open: whether trips and lists live on the server, shared by the
+    household (a migration, 006), rather than per phone in localStorage
+    as the trip list is today.
 - **Quantity model: purchased amount and per-unit fill level (Low → Medium,
   two steps)** — two related fixes to what an item's `quantity` means,
   planned together but built in order. Step 1 is small, fixes a bug in use
