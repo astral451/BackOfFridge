@@ -468,7 +468,30 @@ body.sheet-open { overflow: hidden; }
   background: var(--surface);
   border-top: 1px solid var(--border);
 }
-.card-foot .save-btn { margin: 0; min-height: 52px; border-radius: 12px; font-size: 1rem; }
+.card-foot .save-btn, .card-foot .save-next-btn {
+  margin: 0;
+  min-height: 52px;
+  border-radius: 12px;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+/* Save & scan next is the main button when adding; Save sits beside it. */
+.card-foot .save-btn:has(+ .save-next-btn:not([hidden])) {
+  flex: 1 1 0;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.card-foot .save-next-btn {
+  flex: 2 1 0;
+  border: none;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.card-foot .save-next-btn[hidden] { display: none; }
+.trip-count { font-size: 0.82rem; color: var(--muted); white-space: nowrap; }
 .card-input, .product-box input, .barcode-row input {
   font: inherit;
   font-size: 16px;

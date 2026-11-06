@@ -79,6 +79,7 @@
         <div class="card-head">
           <button class="sheet-close" type="button" id="closeSheetBtn" aria-label="Close"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
           <h2 id="sheetTitle">Log a purchase</h2>
+          <span id="tripCount" class="trip-count" hidden></span>
         </div>
         <form id="itemForm" class="card-form">
           <div class="card-body">
@@ -159,7 +160,8 @@
           </div>
 
           <div class="card-foot">
-            <button type="submit" class="save-btn">Add item</button>
+            <button type="submit" class="save-btn">Save</button>
+            <button type="button" class="save-next-btn" id="saveNextBtn">Save &amp; scan next</button>
           </div>
         </form>
       </div>

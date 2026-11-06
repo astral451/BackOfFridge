@@ -581,7 +581,19 @@ priority — a Low item isn't necessarily more worth doing than a High one.
     non-perishable on Approx, and changing the category flips the tab
     while nothing's picked. New items still default to perishable until
     step 5's category guess.
-  - Next: step 3, "Save & scan next" and the trip count.
+  - **Step 3 built (2026-11-06): Save & scan next.** The footer is
+    Save (closes the card) beside the main Save & scan next. That tap
+    opens the camera first (iOS only allows it from a tap), clears the
+    card for the next item keeping the location, and saves in the
+    background; "Saved: Milk ×2 · Pantry · expires …" shows in the card.
+    If the save fails and the next item hasn't started, the item goes
+    back into the card. The header shows "Trip: N saved". The trip
+    (count and last location) is kept in localStorage, so a reload after
+    the camera doesn't lose it, and ends after 3 hours with no save.
+    Edit shows a single Save changes and doesn't count.
+  - Next: step 4, moving **+**, Buy again and Edit fully onto the card
+    (they already open it; what's left is checking each pre-fills it as
+    designed, e.g. + opening with the name first and suggestions).
 
   Decisions (2026-11-05):
   - **Typing an item in (+):** the name field comes first, with

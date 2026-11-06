@@ -674,7 +674,8 @@
     formTrackingMode = null;
     document.getElementById('f-fill-wrap').classList.add('hidden');
     document.getElementById('sheetTitle').textContent = 'Log a purchase';
-    document.querySelector('#itemForm .save-btn').textContent = 'Add item';
+    document.querySelector('#itemForm .save-btn').textContent = 'Save';
+    document.getElementById('saveNextBtn').hidden = false;
   }
 
   // Full reset for opening a blank form (the "+" button, and after a
@@ -693,7 +694,9 @@
     setAddMode();
     // A shopping trip mostly goes in one place, so a new item starts where
     // the last one saved went.
-    setFormLocation(lastSavedLocation, lastSavedLocation ? 'last item' : null);
+    var trip = loadTrip();
+    setFormLocation(trip.location, trip.location ? 'last item' : null);
+    renderTripCount();
     syncQtyUnit();
   }
 
@@ -731,6 +734,7 @@
 
     document.getElementById('sheetTitle').textContent = 'Edit item';
     document.querySelector('#itemForm .save-btn').textContent = 'Save changes';
+    document.getElementById('saveNextBtn').hidden = true;
     expandMoreFields();
     document.getElementById('itemSheet').scrollIntoView({ behavior: 'smooth' });
     document.getElementById('f-name').focus();
@@ -1596,8 +1600,31 @@
   // the form's location (quick add's parser reads its options too); the
   // tiles are drawn from it and write back to it.
 
-  // Where the last item added went, so the next one this trip starts there.
-  var lastSavedLocation = '';
+  // This shopping trip: how many items were added, and where the last one
+  // went (the next one starts there). Kept in localStorage so a reload -
+  // which iOS sometimes does after the camera - doesn't lose it. A trip
+  // ends after TRIP_IDLE_MS with nothing saved.
+  var TRIP_IDLE_MS = 3 * 60 * 60 * 1000;
+  function loadTrip() {
+    var t = null;
+    try { t = JSON.parse(localStorage.getItem('trip') || 'null'); } catch (e) {}
+    if (!t || !(Date.now() - t.at < TRIP_IDLE_MS)) t = { count: 0, location: '', at: 0 };
+    return t;
+  }
+  function noteTripSave(payload) {
+    var t = loadTrip();
+    t.count += 1;
+    if (payload.location) t.location = payload.location;
+    t.at = Date.now();
+    try { localStorage.setItem('trip', JSON.stringify(t)); } catch (e) {}
+    renderTripCount();
+  }
+  function renderTripCount() {
+    var t = loadTrip();
+    var el = document.getElementById('tripCount');
+    el.textContent = 'Trip: ' + t.count + ' saved';
+    el.hidden = !t.count;
+  }
 
   function formLocationOptions() {
     return Array.prototype.map.call(document.querySelectorAll('#f-location-select option'), function (o) { return o.value; })
@@ -1927,10 +1954,11 @@
   });
   document.getElementById('f-barcode').addEventListener('change', lookupTyped);
 
-  document.getElementById('itemForm').addEventListener('submit', function (e) {
-    e.preventDefault();
-    // Stray spaces before/after a typed or dictated value are stripped
-    // here (the server strips them again, as a second line of defence).
+  // The form as a request body, or null (after saying why) if it can't be
+  // saved. Stray spaces before/after a typed or dictated value are
+  // stripped here (the server strips them again, as a second line of
+  // defence).
+  function buildPayload() {
     var payload = {
       name: document.getElementById('f-name').value.trim(),
       category: document.getElementById('f-category').value,
@@ -1943,7 +1971,7 @@
     };
     if (!payload.name) {
       alert('Enter an item name.');
-      return;
+      return null;
     }
     payload.quantity = parseFloat(document.getElementById('f-quantity').value) || 1;
     payload.unit = document.getElementById('f-unit').value.trim();
@@ -1951,24 +1979,88 @@
       var pct = parseFloat(document.getElementById('f-fillpercent').value);
       if (!(pct >= 0 && pct <= 100)) {
         alert('Fill % must be between 0 and 100.');
-        return;
+        return null;
       }
       payload.fill_percent = pct;
       if (!editingItemId) payload.tracking_mode = 'fill_level';
     }
+    return payload;
+  }
 
+  // "Milk ×2 · Pantry · expires Fri, Nov 20"
+  function describePayload(payload) {
+    return payload.name + ' ×' + payload.quantity
+      + ' · ' + (payload.location || 'no location')
+      + ' · ' + (payload.expiration_date ? 'expires ' + shortDate(isoToDate(payload.expiration_date)) : 'no expiry');
+  }
+
+  // Puts an item that failed to save back into the form, so nothing typed
+  // is lost.
+  function restorePayload(payload) {
+    document.getElementById('f-name').value = payload.name;
+    document.getElementById('f-category').value = payload.category;
+    setFormLocation(payload.location);
+    document.getElementById('f-tag-select').value = payload.tag || '';
+    document.getElementById('f-purchase').value = payload.purchase_date || '';
+    document.getElementById('f-notes').value = payload.notes || '';
+    document.getElementById('f-barcode').value = payload.barcode || '';
+    lastLookedUp = payload.barcode || null;
+    document.getElementById('f-quantity').value = payload.quantity;
+    document.getElementById('f-unit').value = payload.unit || '';
+    syncQtyUnit();
+    if (payload.tracking_mode === 'fill_level') {
+      formTrackingMode = 'fill_level';
+      showFillField(payload.fill_percent);
+    }
+    setFormExpiry(payload.expiration_date || '');
+  }
+
+  function postItem(payload) {
+    return apiFetch('/items', { method: 'POST', body: JSON.stringify(payload) }).then(function () {
+      noteTripSave(payload);
+      refresh();
+    });
+  }
+
+  // Save: Enter in a field, or the Save button. Closes the card.
+  document.getElementById('itemForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var payload = buildPayload();
+    if (!payload) return;
     var request = editingItemId
-      ? apiFetch('/items/' + editingItemId, { method: 'PATCH', body: JSON.stringify(payload) })
-      : apiFetch('/items', { method: 'POST', body: JSON.stringify(payload) });
-
-    var wasAdding = !editingItemId;
+      ? apiFetch('/items/' + editingItemId, { method: 'PATCH', body: JSON.stringify(payload) }).then(refresh)
+      : postItem(payload);
     request.then(function () {
-      if (wasAdding && payload.location) lastSavedLocation = payload.location;
       resetItemForm();
       closeSheet();
-      refresh();
     }).catch(function (err) {
       alert(err.message);
+    });
+  });
+
+  // Save & scan next: a whole shopping trip goes in one after another.
+  // iOS only opens the camera straight from a tap, so the camera opens
+  // first, in this tap, and the save runs while the photo is taken. The
+  // card is cleared for the next item at once; if the save fails, the
+  // item comes back into the card (unless the next one has started).
+  document.getElementById('saveNextBtn').addEventListener('click', function () {
+    var payload = buildPayload();
+    if (!payload) return;
+    document.getElementById('f-scan-file').click();
+    resetItemForm();
+    setFormLocation(payload.location, payload.location ? 'last item' : null);
+    setScanStatus('Saving ' + payload.name + '…');
+    postItem(payload).then(function () {
+      if (document.getElementById('scanStatus').textContent.indexOf('Saving ') === 0) {
+        setScanStatus('Saved: ' + describePayload(payload) + '.', 'found');
+      }
+    }).catch(function (err) {
+      if (!document.getElementById('f-name').value.trim()) {
+        restorePayload(payload);
+        setScanStatus('Couldn\'t save ' + payload.name + ': ' + err.message + ' It\'s back in the form.', 'error');
+      } else {
+        alert('Couldn\'t save ' + payload.name + ': ' + err.message);
+      }
     });
   });
 
