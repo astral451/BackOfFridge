@@ -122,12 +122,10 @@
       showFillField(100);
     }
     document.getElementById('f-purchase').value = new Date().toISOString().slice(0, 10);
-    document.getElementById('f-expiration').value = '';
+    setFormExpiry('');
     document.getElementById('f-notes').value = '';
     document.getElementById('f-barcode').value = item.barcode || '';
     expandMoreFields();
-    document.getElementById('itemSheet').scrollIntoView({ behavior: 'smooth' });
-    document.getElementById('f-expiration').focus();
   }
 
   // Dictation quirks to normalize before parsing: iOS/Android speech-to-text
@@ -641,10 +639,7 @@
       document.getElementById('f-tag-new').classList.add('hidden');
       touchedMoreFields = true;
     }
-    if (parsed.expiration) {
-      document.getElementById('f-expiration').value = parsed.expiration;
-      touchedMoreFields = true;
-    }
+    if (parsed.expiration) setFormExpiry(parsed.expiration);
     if (parsed.notes) {
       document.getElementById('f-notes').value = parsed.notes;
       touchedMoreFields = true;
@@ -688,6 +683,7 @@
   function resetItemForm() {
     document.getElementById('itemForm').reset();
     document.getElementById('f-category').value = 'perishable';
+    setFormExpiry('');
     document.getElementById('f-tag-new').classList.add('hidden');
     document.getElementById('moreFields').hidden = true;
     setScanStatus('');
@@ -718,7 +714,7 @@
     document.getElementById('f-tag-select').value = item.tag || '';
     document.getElementById('f-tag-new').classList.add('hidden');
     document.getElementById('f-purchase').value = item.purchase_date || '';
-    document.getElementById('f-expiration').value = item.expiration_date || '';
+    setFormExpiry(item.expiration_date || '');
     document.getElementById('f-notes').value = item.notes || '';
     document.getElementById('f-barcode').value = item.barcode || '';
     setScanStatus('');
@@ -1345,6 +1341,256 @@
     return select.value;
   }
 
+  // --- Quick entry card: expiry ----------------------------------------
+  // Two ways to set one date, kept in the hidden #f-expiration:
+  // - Approx: chips (3 days ... 1 yr, None), each showing the date it sets.
+  // - Exact: month -> day -> year, three taps, with the likely year (the
+  //   next time that month and day comes round) highlighted.
+  // Perishable food opens on Exact, since meat and milk dates matter;
+  // non-perishable opens on Approx.
+  var SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  var WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  var APPROX_CHIPS = [
+    { key: '3d', label: '3 days', days: 3 },
+    { key: '1w', label: '1 wk', days: 7 },
+    { key: '2w', label: '2 wk', days: 14 },
+    { key: '4w', label: '4 wk', days: 28 },
+    { key: '3m', label: '3 mo', months: 3 },
+    { key: '6m', label: '6 mo', months: 6 },
+    { key: '1y', label: '1 yr', months: 12 },
+    { key: 'none', label: 'None' },
+  ];
+
+  var exp = {
+    mode: 'approx',     // which tab shows
+    chosenMode: false,  // the user picked the tab, so category changes leave it
+    approxKey: null,    // the chip last tapped ('none' = no expiry)
+    m: null, d: null, y: null,
+    page: 'month',      // exact picker step: month, day, year, done
+  };
+
+  function todayLocal() {
+    var t = new Date();
+    t.setHours(0, 0, 0, 0);
+    return t;
+  }
+  function dateToISO(dt) { return formatISODate(dt.getFullYear(), dt.getMonth(), dt.getDate()); }
+  function isoToDate(iso) { return new Date(iso + 'T00:00:00'); }
+  function chipDate(chip) {
+    if (!chip.days && !chip.months) return null;
+    var dt = todayLocal();
+    if (chip.days) dt.setDate(dt.getDate() + chip.days);
+    else dt.setMonth(dt.getMonth() + chip.months);
+    return dt;
+  }
+  // "Thu, Nov 19" this year, "Nov 19, 2027" otherwise: short enough for a chip.
+  function shortDate(dt) {
+    return dt.getFullYear() === todayLocal().getFullYear()
+      ? WEEKDAYS[dt.getDay()] + ', ' + SHORT_MONTHS[dt.getMonth()] + ' ' + dt.getDate()
+      : SHORT_MONTHS[dt.getMonth()] + ' ' + dt.getDate() + ', ' + dt.getFullYear();
+  }
+  function longDate(dt) {
+    return WEEKDAYS[dt.getDay()] + ', ' + SHORT_MONTHS[dt.getMonth()] + ' ' + dt.getDate() + ', ' + dt.getFullYear();
+  }
+  function validDay(y, m, d) { return new Date(y, m, d).getDate() === d; }
+  // The next time month m, day d comes round, today included.
+  function likelyYear(m, d) {
+    var today = todayLocal();
+    var y = today.getFullYear();
+    for (var i = 0; i < 8; i++, y++) {
+      if (validDay(y, m, d) && new Date(y, m, d) >= today) return y;
+    }
+    return today.getFullYear();
+  }
+  function modeForCategory() {
+    return document.getElementById('f-category').value === 'perishable' ? 'exact' : 'approx';
+  }
+
+  // Sets the expiry ('' or null for none) and shows it. `mode` forces a
+  // tab; otherwise a date opens on Exact with that date selected, and no
+  // date opens the tab that suits the category.
+  function setFormExpiry(iso, mode) {
+    iso = iso || '';
+    document.getElementById('f-expiration').value = iso;
+    exp.approxKey = null;
+    exp.chosenMode = !!mode;
+    if (iso) {
+      var dt = isoToDate(iso);
+      exp.m = dt.getMonth(); exp.d = dt.getDate(); exp.y = dt.getFullYear();
+      exp.page = 'done';
+    } else {
+      exp.m = exp.d = exp.y = null;
+      exp.page = 'month';
+    }
+    exp.mode = mode || (iso ? 'exact' : modeForCategory());
+    renderExpiry();
+  }
+
+  // When the category changes and nothing's been picked yet, open the tab
+  // that suits it.
+  function followCategoryForExpiry() {
+    if (exp.chosenMode || document.getElementById('f-expiration').value) return;
+    if (exp.mode !== modeForCategory()) {
+      exp.mode = modeForCategory();
+      renderExpiry();
+    }
+  }
+
+  function expButton(className, pressed, onClick) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = className;
+    if (pressed !== null) b.setAttribute('aria-pressed', String(pressed));
+    b.addEventListener('click', onClick);
+    return b;
+  }
+  function twoLine(b, top, bottom) {
+    var t = document.createElement('span');
+    t.className = 'chip-top';
+    t.textContent = top;
+    var u = document.createElement('span');
+    u.className = 'chip-sub';
+    u.textContent = bottom;
+    b.appendChild(t);
+    b.appendChild(u);
+  }
+
+  function renderExpiry() {
+    var value = document.getElementById('f-expiration').value;
+    var approx = exp.mode === 'approx';
+    document.getElementById('expTabApprox').setAttribute('aria-pressed', String(approx));
+    document.getElementById('expTabExact').setAttribute('aria-pressed', String(!approx));
+    document.getElementById('expApprox').hidden = !approx;
+    document.getElementById('expExact').hidden = approx;
+
+    // Summary line: the full date and how far off it is.
+    var summary = document.getElementById('expSummary');
+    var text = 'No expiry set yet';
+    var cls = 'exp-summary muted';
+    if (value) {
+      var dt = isoToDate(value);
+      var n = Math.round((dt - todayLocal()) / 86400000);
+      text = (approx ? 'About ' : '') + longDate(dt) + ' · '
+        + (n < 0 ? 'that\'s in the past' : n === 0 ? 'today' : 'in ' + n + (n === 1 ? ' day' : ' days'));
+      cls = 'exp-summary' + (n < 0 ? ' warn' : '');
+    } else if (exp.approxKey === 'none') {
+      text = 'No expiry date';
+      cls = 'exp-summary';
+    } else if (!approx) {
+      text = exp.page === 'month' ? 'Tap the month on the label'
+        : exp.page === 'day' ? 'Now the day' : exp.page === 'year' ? 'And the year' : text;
+    }
+    summary.textContent = text;
+    summary.className = cls;
+
+    if (approx) renderApproxChips(value);
+    else renderExactPicker();
+  }
+
+  function renderApproxChips(value) {
+    var box = document.getElementById('expApprox');
+    box.textContent = '';
+    APPROX_CHIPS.forEach(function (chip) {
+      var dt = chipDate(chip);
+      // A chip shows as picked if it was tapped, or if the date already
+      // set is the one it would set.
+      var on = exp.approxKey === chip.key || (!exp.approxKey && dt && value === dateToISO(dt));
+      var b = expButton('exp-chip', on, function () {
+        document.getElementById('f-expiration').value = dt ? dateToISO(dt) : '';
+        exp.approxKey = chip.key;
+        if (dt) { exp.m = dt.getMonth(); exp.d = dt.getDate(); exp.y = dt.getFullYear(); exp.page = 'done'; }
+        else { exp.m = exp.d = exp.y = null; exp.page = 'month'; }
+        renderExpiry();
+      });
+      twoLine(b, chip.label, dt ? shortDate(dt) : 'no expiry');
+      box.appendChild(b);
+    });
+  }
+
+  function renderExactPicker() {
+    var crumbs = document.getElementById('expCrumbs');
+    crumbs.textContent = '';
+    function crumb(label, page, enabled) {
+      var b = expButton('exp-crumb', exp.page === page, function () {
+        if (!enabled) return;
+        exp.page = page;
+        renderExpiry();
+      });
+      b.textContent = label;
+      b.disabled = !enabled;
+      crumbs.appendChild(b);
+    }
+    crumb(exp.m !== null ? SHORT_MONTHS[exp.m] : 'Month', 'month', true);
+    crumb(exp.d !== null ? String(exp.d) : 'Day', 'day', exp.m !== null);
+    crumb(exp.y !== null ? String(exp.y) : 'Year', 'year', exp.d !== null);
+
+    var picker = document.getElementById('expPicker');
+    picker.textContent = '';
+    picker.className = '';
+    var today = todayLocal();
+
+    // Choosing a month or day starts the date over from there, so the
+    // value is cleared until the year completes it.
+    if (exp.page === 'month') {
+      picker.className = 'exp-grid cols-4';
+      SHORT_MONTHS.forEach(function (label, i) {
+        var b = expButton('exp-chip exp-month' + (i === today.getMonth() ? ' is-now' : ''), exp.m === i, function () {
+          exp.m = i; exp.d = null; exp.y = null; exp.page = 'day'; exp.approxKey = null;
+          document.getElementById('f-expiration').value = '';
+          renderExpiry();
+        });
+        b.textContent = label;
+        picker.appendChild(b);
+      });
+    } else if (exp.page === 'day') {
+      picker.className = 'exp-grid cols-7';
+      // Up to 31, and Feb 29 is always offered; the year step rules out
+      // years it doesn't exist in.
+      var count = new Date(2028, exp.m + 1, 0).getDate();
+      for (var d = 1; d <= count; d++) {
+        (function (day) {
+          var b = expButton('exp-chip exp-day', exp.d === day, function () {
+            exp.d = day; exp.y = null; exp.page = 'year'; exp.approxKey = null;
+            document.getElementById('f-expiration').value = '';
+            renderExpiry();
+          });
+          b.textContent = String(day);
+          picker.appendChild(b);
+        })(d);
+      }
+    } else if (exp.page === 'year') {
+      picker.className = 'exp-grid cols-4';
+      var likely = likelyYear(exp.m, exp.d);
+      var years = [];
+      for (var y = today.getFullYear(); y < today.getFullYear() + 4; y++) years.push(y);
+      if (exp.y !== null && years.indexOf(exp.y) === -1) years.unshift(exp.y);
+      years.forEach(function (yr) {
+        var b = expButton('exp-chip exp-year' + (yr === likely ? ' is-likely' : ''), exp.y === yr, function () {
+          exp.y = yr; exp.page = 'done'; exp.approxKey = null;
+          document.getElementById('f-expiration').value = formatISODate(yr, exp.m, exp.d);
+          renderExpiry();
+        });
+        twoLine(b, String(yr), yr === likely ? 'next ' + SHORT_MONTHS[exp.m] + ' ' + exp.d : '');
+        b.disabled = !validDay(yr, exp.m, exp.d);
+        picker.appendChild(b);
+      });
+    }
+  }
+
+  document.getElementById('expTabApprox').addEventListener('click', function () {
+    exp.mode = 'approx';
+    exp.chosenMode = true;
+    renderExpiry();
+  });
+  document.getElementById('expTabExact').addEventListener('click', function () {
+    exp.mode = 'exact';
+    exp.chosenMode = true;
+    renderExpiry();
+  });
+  document.getElementById('f-category').addEventListener('change', followCategoryForExpiry);
+  // Drawn once now: on wide screens the card is showing from the start.
+  setFormExpiry('');
+
   // --- Quick entry card: location tiles, quantity stepper -------------
   // The hidden #f-location-select stays the single source of truth for
   // the form's location (quick add's parser reads its options too); the
@@ -1575,10 +1821,7 @@
     }
     barcodeInput.value = result.barcode;
     lastLookedUp = result.barcode;
-    if (result.expiration_date) {
-      document.getElementById('f-expiration').value = result.expiration_date;
-      expandMoreFields();
-    }
+    if (result.expiration_date) setFormExpiry(result.expiration_date);
     var expiryNote = result.expiration_date ? ' Expiry date read from the code.' : '';
 
     // Editing an existing item: just attach the barcode, don't overwrite
@@ -1602,6 +1845,7 @@
     if (p.source === 'local') {
       // Bought here before: bring back this household's own choices.
       if (p.category) document.getElementById('f-category').value = p.category;
+      followCategoryForExpiry();
       setFormLocation(p.location || '', p.location ? 'last time' : null);
       document.getElementById('f-tag-select').value = p.tag || '';
       document.getElementById('f-tag-new').classList.add('hidden');

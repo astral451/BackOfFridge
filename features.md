@@ -571,7 +571,17 @@ priority — a Low item isn't necessarily more worth doing than a High one.
     moved under More details; Expires is still a plain date box until
     step 2. +, Buy again, quick add and Edit already use the card, since
     it's the same form.
-  - Next: step 2, the expiry chips and the 3-tap picker.
+  - **Step 2 built (2026-11-06): Expires.** Approx / Exact date tabs.
+    Approx chips show the date each sets; Exact is month → day → year
+    with this month underlined and the likely year outlined ("next Nov
+    13"), and the steps as buttons that jump back. A past date warns;
+    Feb 29 disables non-leap years. The hidden `#f-expiration` holds the
+    value; `setFormExpiry()` sets it from Edit, Buy again, quick add and
+    a date read from the barcode. Perishable opens on Exact,
+    non-perishable on Approx, and changing the category flips the tab
+    while nothing's picked. New items still default to perishable until
+    step 5's category guess.
+  - Next: step 3, "Save & scan next" and the trip count.
 
   Decisions (2026-11-05):
   - **Typing an item in (+):** the name field comes first, with

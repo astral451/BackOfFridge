@@ -121,9 +121,20 @@
 
             <section class="card-section" aria-labelledby="expHeading">
               <div class="section-head">
-                <h3 id="expHeading"><label for="f-expiration">Expires</label></h3>
+                <h3 id="expHeading" class="grow">Expires</h3>
+                <div class="seg" role="group" aria-label="Expiry style">
+                  <button type="button" id="expTabApprox" aria-pressed="false">Approx</button>
+                  <button type="button" id="expTabExact" aria-pressed="false">Exact date</button>
+                </div>
               </div>
-              <input type="date" id="f-expiration" class="card-input">
+              <div id="expSummary" class="exp-summary" aria-live="polite"></div>
+              <!-- The chips and the picker set this; it's what the rest of the code reads. -->
+              <input type="hidden" id="f-expiration">
+              <div id="expApprox" class="exp-grid cols-4"></div>
+              <div id="expExact" hidden>
+                <div id="expCrumbs" class="exp-crumbs"></div>
+                <div id="expPicker"></div>
+              </div>
             </section>
 
             <button class="disclosure-toggle" type="button" data-toggle="moreFields">More details (unit, category, tag, notes) ▾</button>
