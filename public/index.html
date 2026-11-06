@@ -77,7 +77,7 @@
           <form id="quickAddForm">
             <input type="text" id="quickAddInput" placeholder="Quick add… milk, 1 gallon, fridge, dairy (tap the mic to dictate)">
           </form>
-          <button type="button" id="scanBarBtn" class="secondary" aria-label="Scan a barcode" title="Scan a barcode"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
+          <button type="button" id="scanBarBtn" class="secondary" aria-label="Scan a barcode" title="Scan a barcode"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round"><path stroke-width="2" stroke-linejoin="round" d="M3 7V4h3M18 4h3v3M21 17v3h-3M6 20H3v-3"/><path stroke-width="2" d="M7 8v8M12 8v8M16.5 8v8"/><path stroke-width="1" d="M9.5 8v8M14 8v8M18.5 8v8"/></svg></button>
           <button type="button" id="openSheetBtn" aria-label="Add item">+</button>
         </div>
 
@@ -96,7 +96,7 @@
           <div class="card-body">
             <div class="barcode-row">
               <input type="text" id="f-barcode" placeholder="Barcode (type or scan)" inputmode="numeric" autocomplete="off" aria-label="Barcode">
-              <button type="button" id="scanBtn" class="scan-btn"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg> Scan</button>
+              <button type="button" id="scanBtn" class="scan-btn"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round"><path stroke-width="2" stroke-linejoin="round" d="M3 7V4h3M18 4h3v3M21 17v3h-3M6 20H3v-3"/><path stroke-width="2" d="M7 8v8M12 8v8M16.5 8v8"/><path stroke-width="1" d="M9.5 8v8M14 8v8M18.5 8v8"/></svg> Scan</button>
               <!-- Opens the phone's own camera; the photo is read on the server. -->
               <input type="file" id="f-scan-file" accept="image/*" capture="environment" class="offscreen" tabindex="-1" aria-hidden="true">
             </div>
