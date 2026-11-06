@@ -55,11 +55,11 @@ const buy = (name, extra = {}, headers = {}) => call('POST', '/api/items', { nam
 const current = (headers) => call('GET', '/api/trips/current', undefined, headers);
 
 test('no trip until something is saved into one', async () => {
-  assert.deepStrictEqual((await current()).body, { trip: null });
+  assert.deepStrictEqual((await current()).body.trip, null);
   const plain = await call('POST', '/api/items', { name: 'Not on a trip' });
   assert.strictEqual(plain.status, 201);
   assert.strictEqual(plain.body.trip, undefined);
-  assert.deepStrictEqual((await current()).body, { trip: null });
+  assert.deepStrictEqual((await current()).body.trip, null);
 });
 
 test('two people saving land in one shared trip, newest first', async () => {
@@ -91,7 +91,7 @@ test('rows show the item as it is now, and deleted items stay listed', async () 
 
 test('another household sees none of it, and has its own trip', async () => {
   const other = { 'x-test-household': '2' };
-  assert.deepStrictEqual((await current(other)).body, { trip: null });
+  assert.deepStrictEqual((await current(other)).body.trip, null);
   const mine = (await current()).body.trip;
   assert.strictEqual((await call('POST', `/api/trips/${mine.id}/end`, {}, other)).status, 404);
   const theirs = await buy('Milk', {}, other);
@@ -103,7 +103,7 @@ test('another household sees none of it, and has its own trip', async () => {
 test('End trip: the items stay, the next save starts a new trip', async () => {
   const before = (await current()).body.trip;
   assert.strictEqual((await call('POST', `/api/trips/${before.id}/end`)).status, 204);
-  assert.deepStrictEqual((await current()).body, { trip: null });
+  assert.deepStrictEqual((await current()).body.trip, null);
   assert.strictEqual(db.prepare("SELECT status FROM trips WHERE id = ?").get(before.id).status, 'done');
   const next = await buy('Butter');
   assert.notStrictEqual(next.body.trip.id, before.id);
@@ -114,7 +114,7 @@ test('End trip: the items stay, the next save starts a new trip', async () => {
 test('a trip with no save for 3 hours ends by itself', async () => {
   const trip = (await current()).body.trip;
   db.prepare("UPDATE trips SET last_activity_at = datetime('now', '-3 hours', '-1 minute') WHERE id = ?").run(trip.id);
-  assert.deepStrictEqual((await current()).body, { trip: null });
+  assert.deepStrictEqual((await current()).body.trip, null);
   const row = db.prepare('SELECT status, ended_at, last_activity_at FROM trips WHERE id = ?').get(trip.id);
   assert.strictEqual(row.status, 'done');
   assert.strictEqual(row.ended_at, row.last_activity_at);
@@ -177,10 +177,12 @@ test('adding to the list: starts it, no duplicates, and leaves the suggestions',
 
   const { list: l, suggestions: s } = (await list()).body;
   assert.strictEqual(l.status, 'planned');
+  // /current carries the list too, for the "added to the shopping list" notice.
+  assert.strictEqual((await current(H3)).body.list.id, l.id);
   assert.deepStrictEqual(names(l.entries), ['Eggs', 'Coffee']);
   assert.ok(!names(s.used).includes('Coffee'));
   // The list isn't a trip yet.
-  assert.deepStrictEqual((await current(H3)).body, { trip: null });
+  assert.deepStrictEqual((await current(H3)).body.trip, null);
 });
 
 test('list rows: change the quantity, remove one', async () => {

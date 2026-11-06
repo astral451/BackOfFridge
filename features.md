@@ -745,15 +745,20 @@ priority — a Low item isn't necessarily more worth doing than a High one.
   /api/trips/:id/entries` (`trips.addToTrip`; refused once a trip is
   over).
 
-  **Lists page step 2 built (2026-11-06): "New item added".** A phone
-  is *shopping* a trip once it saves into it or taps Start shopping
-  (localStorage `myTrip`). When a row appears in that trip's still to
-  get, added by someone else, the phone shows a notice at the top
-  ("New item added: Milk · alex added it to the trip"; vibrates where
-  the browser can), for 8 s or until dismissed; tapping it opens the
-  trip with the row highlighted ("new · added by alex", for 2 minutes).
-  A shopping phone checks every 10 s (others every 30 s; the trip page
-  every 10 s). Rows already seen are kept per trip (`tripSeen`), so a
+  **Lists page step 2 built (2026-11-06): "New item added".** When
+  someone adds to the trip going now or to the shopping list, **everyone
+  in the household except the person who added it** gets a notice
+  (actions are keyed by username; decided by the user 2026-11-06,
+  replacing a first version that only told the phone doing the
+  shopping). Trip: "New item added: Milk · alex added it to the trip";
+  tapping opens the trip with the row highlighted ("new · added by
+  alex", for 2 minutes). List: "Added to the shopping list: Rice · alex
+  added it"; tapping opens the list. 8 s, or until dismissed; vibrates
+  where the browser can. `GET /api/trips/current` also returns the
+  list. Pages check every 10 s while a trip is going, else 30 s (the
+  trip page every 10 s). Row ids already seen are kept in localStorage
+  (`tripSeen`): the very first look on a phone only records; after that
+  rows not seen before count as new if added in the last 24 hours, so a
   reload neither loses nor repeats a notice. Only while the page is
   open: no push notifications to a locked phone.
 

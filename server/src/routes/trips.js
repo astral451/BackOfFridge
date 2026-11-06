@@ -17,10 +17,14 @@ router.get('/', (req, res) => {
 });
 
 // GET /api/trips/current - the household's current trip with its rows
-// ({ trip: null } when there isn't one). The trip page re-reads this
+// ({ trip: null } when there isn't one), and the shopping list ({ list }). The trip page re-reads this
 // while it's open, so two people scanning see each other's items.
 router.get('/current', (req, res) => {
-  res.json({ trip: trips.tripView(req.householdId, trips.activeTrip(req.householdId)) });
+  res.json({
+    trip: trips.tripView(req.householdId, trips.activeTrip(req.householdId)),
+    // The shopping list too, so pages can tell people when someone adds to it.
+    list: trips.tripView(req.householdId, trips.plannedTrip(req.householdId)),
+  });
 });
 
 // --- The shopping list ---------------------------------------------------
