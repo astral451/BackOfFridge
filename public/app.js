@@ -1653,7 +1653,10 @@
   }
   // `item` is the server's answer to the save, carrying the trip it joined.
   function noteTripSave(payload, item) {
-    if (item && item.trip) currentTrip = item.trip;
+    if (item && item.trip) {
+      currentTrip = Object.assign({}, currentTrip || {}, item.trip);
+      markShopping(item.trip.id);
+    }
     if (payload.location) rememberLocation(payload.location);
     renderTripCount();
   }
@@ -1681,18 +1684,89 @@
   document.getElementById('shoppingNow').addEventListener('click', function () { showTripView(); });
   // Someone else may start or end a trip: check when the page comes back
   // into view, and every 30 s while it's showing.
+  // A phone that's shopping checks every 10 s, so a "New item added"
+  // notice arrives while it's still in the store.
   var TRIP_CHECK_MS = 30000;
+  var SHOPPING_CHECK_MS = 10000;
+  var lastTripCheck = 0;
   document.addEventListener('visibilitychange', function () {
     if (!document.hidden) loadCurrentTrip().catch(function () {});
   });
   setInterval(function () {
-    if (!document.hidden) loadCurrentTrip().catch(function () {});
-  }, TRIP_CHECK_MS);
+    if (document.hidden || tripPoll) return; // the trip page polls for itself
+    var every = currentTrip && isShopping(currentTrip.id) ? SHOPPING_CHECK_MS : TRIP_CHECK_MS;
+    if (Date.now() - lastTripCheck < every - 500) return;
+    loadCurrentTrip().catch(function () {});
+  }, SHOPPING_CHECK_MS);
+
+  // --- "New item added": someone else adds to the trip this phone is
+  // shopping. A phone is shopping a trip once it saves into it or taps
+  // Start shopping (localStorage 'myTrip'). The rows still to get that
+  // this phone has already seen are kept per trip ('tripSeen'), so a
+  // reload - iOS sometimes reloads after the camera - doesn't lose or
+  // repeat a notice.
+  var NOTICE_MS = 8000;
+  var newEntryIds = {};   // still-to-get rows to highlight on the trip page
+  var noticeTimer = null;
+
+  function markShopping(tripId) {
+    try { localStorage.setItem('myTrip', tripId); } catch (e) {}
+  }
+  function isShopping(tripId) {
+    try { return localStorage.getItem('myTrip') === tripId; } catch (e) { return false; }
+  }
+  function loadSeen(tripId) {
+    var v = null;
+    try { v = JSON.parse(localStorage.getItem('tripSeen') || 'null'); } catch (e) {}
+    return v && v.trip === tripId ? v.ids : null;
+  }
+  function saveSeen(tripId, ids) {
+    try { localStorage.setItem('tripSeen', JSON.stringify({ trip: tripId, ids: ids })); } catch (e) {}
+  }
+
+  // Called with every fresh copy of the current trip.
+  function checkForNewEntries(trip) {
+    if (!trip) return;
+    var todo = trip.entries.filter(function (e) { return !e.bought_at; });
+    var ids = todo.map(function (e) { return e.id; });
+    var seen = loadSeen(trip.id);
+    saveSeen(trip.id, ids);
+    // The first look at a trip only records what's there.
+    if (!seen || !isShopping(trip.id) || !myName) return;
+    var fresh = todo.filter(function (e) { return seen.indexOf(e.id) === -1 && e.added_by && e.added_by !== myName; });
+    if (!fresh.length) return;
+    fresh.forEach(function (e) { newEntryIds[e.id] = Date.now(); });
+    showNewItemNotice(fresh);
+  }
+
+  function showNewItemNotice(entries) {
+    var names = entries.map(function (e) { return e.name; });
+    var who = [];
+    entries.forEach(function (e) { if (who.indexOf(e.added_by) === -1) who.push(e.added_by); });
+    document.getElementById('noticeTitle').textContent = (names.length === 1 ? 'New item added: ' : 'New items added: ') + names.join(', ');
+    document.getElementById('noticeSub').textContent = who.join(' and ') + ' added ' + (names.length === 1 ? 'it' : 'them') + ' to the trip';
+    var box = document.getElementById('tripNotice');
+    box.hidden = false;
+    if (navigator.vibrate) { try { navigator.vibrate(200); } catch (e) {} }
+    clearTimeout(noticeTimer);
+    noticeTimer = setTimeout(function () { box.hidden = true; }, NOTICE_MS);
+  }
+  document.getElementById('noticeClose').addEventListener('click', function (e) {
+    e.stopPropagation();
+    document.getElementById('tripNotice').hidden = true;
+  });
+  // Tapping the notice opens the trip, with the new rows highlighted.
+  document.getElementById('tripNotice').addEventListener('click', function () {
+    this.hidden = true;
+    if (document.getElementById('tripView').hidden) showTripView();
+  });
 
   // Reads the household's current trip (someone else may have added to
   // it, or ended it). Resolves with the full trip, or null.
   function loadCurrentTrip() {
+    lastTripCheck = Date.now();
     return apiFetch('/trips/current').then(function (r) {
+      checkForNewEntries(r.trip);
       var people = [];
       if (r.trip) {
         r.trip.entries.forEach(function (e) {
@@ -2198,9 +2272,13 @@
       var li = document.createElement('li');
       li.className = 'list-row';
       var info = document.createElement('div');
-      info.className = 'trip-row static';
-      rowParts(info, entry.name, entry.quantity != null
-        ? '×' + entry.quantity + (entry.unit ? ' ' + entry.unit : '') : (entry.unit || 'saving it ticks it off'));
+      // Added by someone else in the last couple of minutes: highlighted.
+      var isNew = newEntryIds[entry.id] && Date.now() - newEntryIds[entry.id] < 120000;
+      info.className = 'trip-row static' + (isNew ? ' is-new' : '');
+      var detail = entry.quantity != null
+        ? '×' + entry.quantity + (entry.unit ? ' ' + entry.unit : '') : (entry.unit || 'saving it ticks it off');
+      if (isNew) detail = 'new · added by ' + entry.added_by + (entry.quantity != null ? ' · ' + detail : '');
+      rowParts(info, entry.name, detail);
       // Got it, but nothing to save (or saving it later): tick by hand.
       var tick = document.createElement('button');
       tick.type = 'button';

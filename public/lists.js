@@ -203,7 +203,9 @@
     if (!data || !data.planned) return;
     var btn = this;
     btn.disabled = true;
-    apiFetch('/trips/' + encodeURIComponent(data.planned.id) + '/start', { method: 'POST' }).then(function () {
+    apiFetch('/trips/' + encodeURIComponent(data.planned.id) + '/start', { method: 'POST' }).then(function (r) {
+      // This phone is shopping: it gets the "New item added" notices.
+      try { localStorage.setItem('myTrip', r.trip.id); } catch (e) {}
       window.location.href = 'index.html#trip';
     }).catch(function (err) { btn.disabled = false; alert(err.message); });
   });

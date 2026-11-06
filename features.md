@@ -745,6 +745,18 @@ priority — a Low item isn't necessarily more worth doing than a High one.
   /api/trips/:id/entries` (`trips.addToTrip`; refused once a trip is
   over).
 
+  **Lists page step 2 built (2026-11-06): "New item added".** A phone
+  is *shopping* a trip once it saves into it or taps Start shopping
+  (localStorage `myTrip`). When a row appears in that trip's still to
+  get, added by someone else, the phone shows a notice at the top
+  ("New item added: Milk · alex added it to the trip"; vibrates where
+  the browser can), for 8 s or until dismissed; tapping it opens the
+  trip with the row highlighted ("new · added by alex", for 2 minutes).
+  A shopping phone checks every 10 s (others every 30 s; the trip page
+  every 10 s). Rows already seen are kept per trip (`tripSeen`), so a
+  reload neither loses nor repeats a notice. Only while the page is
+  open: no push notifications to a locked phone.
+
   **The Lists page (designed 2026-11-06).** Mockups: the second
   row of https://claude.ai/artifact/JPGBHKB7F1ujrPWv6KbgpK. One place
   to see every list, rather than only reaching them by adding or

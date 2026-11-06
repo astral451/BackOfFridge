@@ -1100,3 +1100,29 @@ body:has(.bottombar) { padding-bottom: 84px; } /* room for the fixed bottom bar 
 .shopping-now-text { flex: 1; display: flex; flex-direction: column; gap: 2px; }
 .shopping-now-title { font-weight: 600; font-size: 0.95rem; }
 .shopping-now-sub { font-size: 0.82rem; opacity: 0.9; }
+
+/* ---------- "New item added" notice (over everything, at the top) ---------- */
+.trip-notice {
+  position: fixed;
+  top: calc(10px + env(safe-area-inset-top, 0px));
+  left: 12px; right: 12px;
+  z-index: 60;
+  max-width: 480px;
+  margin: 0 auto;
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 8px 12px 14px;
+  border-radius: 14px;
+  background: var(--text);
+  color: var(--bg);
+  box-shadow: 0 10px 24px -10px var(--shadow);
+  cursor: pointer;
+}
+.trip-notice[hidden] { display: none; }
+.trip-notice-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.trip-notice-title { font-weight: 600; font-size: 0.95rem; }
+.trip-notice-sub { font-size: 0.82rem; opacity: 0.85; }
+.trip-notice-close {
+  width: 40px; height: 40px; flex: 0 0 auto;
+  border: none; background: none; color: inherit; font-size: 1rem; cursor: pointer;
+}
+.trip-row.is-new { border: 2px solid var(--accent); background: var(--surface-2); }
