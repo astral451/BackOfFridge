@@ -248,6 +248,8 @@ const HOUSEHOLD_ENDPOINTS = [
   ['post', '/api/items/1/throw-out', {}],
   ['post', '/api/items/1/undo', {}],
   ['del', '/api/items/1'],
+  ['get', '/api/trips/current'],
+  ['post', '/api/trips/00000000-0000-4000-8000-000000000000/end', {}],
   ['get', '/api/locations'],
   ['get', '/api/locations/detail'],
   ['post', '/api/locations', { name: 'X' }],

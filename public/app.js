@@ -696,9 +696,10 @@
     setAddMode();
     // A shopping trip mostly goes in one place, so a new item starts where
     // the last one saved went.
-    var trip = loadTrip();
-    setFormLocation(trip.location, trip.location ? 'last item' : null);
+    var lastLoc = lastLocation();
+    setFormLocation(lastLoc, lastLoc ? 'last item' : null);
     renderTripCount();
+    loadCurrentTrip().catch(function () {});
     syncQtyUnit();
   }
 
@@ -1603,36 +1604,44 @@
   // the form's location (quick add's parser reads its options too); the
   // tiles are drawn from it and write back to it.
 
-  // This shopping trip: how many items were added, and where the last one
-  // went (the next one starts there). Kept in localStorage so a reload -
-  // which iOS sometimes does after the camera - doesn't lose it. A trip
-  // ends after TRIP_IDLE_MS with nothing saved.
-  var TRIP_IDLE_MS = 3 * 60 * 60 * 1000;
-  function loadTrip() {
-    var t = null;
-    try { t = JSON.parse(localStorage.getItem('trip') || 'null'); } catch (e) {}
-    if (!t || !(Date.now() - t.at < TRIP_IDLE_MS)) t = { count: 0, location: '', at: 0, ids: [] };
-    if (!t.ids) t.ids = [];
-    return t;
+  // The shopping trip lives on the server, shared by the household
+  // (src/trips.js), so two people scanning add to the same one.
+  // currentTrip is the last copy read ({ id, count } or null), for the
+  // count in the card's header.
+  var currentTrip = null;
+  // Where the last item saved on this phone went, so the next one starts
+  // there. Per phone, since two people may be unpacking into different
+  // rooms; forgotten after the same 3 hours a trip lasts.
+  var LAST_LOCATION_MS = 3 * 60 * 60 * 1000;
+  try { localStorage.removeItem('trip'); } catch (e) {} // the old per-phone trip
+  function lastLocation() {
+    var v = null;
+    try { v = JSON.parse(localStorage.getItem('lastLocation') || 'null'); } catch (e) {}
+    return v && Date.now() - v.at < LAST_LOCATION_MS ? v.location : '';
   }
-  function saveTrip(t) {
-    try { localStorage.setItem('trip', JSON.stringify(t)); } catch (e) {}
+  function rememberLocation(loc) {
+    try { localStorage.setItem('lastLocation', JSON.stringify({ location: loc, at: Date.now() })); } catch (e) {}
   }
-  // `item` is the saved item; its id is kept, in order, for the trip view.
+  // `item` is the server's answer to the save, carrying the trip it joined.
   function noteTripSave(payload, item) {
-    var t = loadTrip();
-    t.count += 1;
-    if (payload.location) t.location = payload.location;
-    if (item && item.id != null) t.ids.push(item.id);
-    t.at = Date.now();
-    saveTrip(t);
+    if (item && item.trip) currentTrip = item.trip;
+    if (payload.location) rememberLocation(payload.location);
     renderTripCount();
   }
   function renderTripCount() {
-    var t = loadTrip();
     var el = document.getElementById('tripCount');
-    el.textContent = 'Trip: ' + t.count + ' saved';
-    el.hidden = !t.count;
+    var n = currentTrip ? currentTrip.count : 0;
+    el.textContent = 'Trip: ' + n + ' saved';
+    el.hidden = !n;
+  }
+  // Reads the household's current trip (someone else may have added to
+  // it, or ended it). Resolves with the full trip, or null.
+  function loadCurrentTrip() {
+    return apiFetch('/trips/current').then(function (r) {
+      currentTrip = r.trip ? { id: r.trip.id, count: r.trip.count } : null;
+      renderTripCount();
+      return r.trip;
+    });
   }
 
   function formLocationOptions() {
@@ -2025,7 +2034,9 @@
   }
 
   function postItem(payload) {
-    return apiFetch('/items', { method: 'POST', body: JSON.stringify(payload) }).then(function (item) {
+    // trip: true puts it on the household's current shopping trip.
+    var body = Object.assign({ trip: true }, payload);
+    return apiFetch('/items', { method: 'POST', body: JSON.stringify(body) }).then(function (item) {
       noteTripSave(payload, item);
       refresh();
     });
@@ -2050,24 +2061,74 @@
   });
 
   // --- This trip -------------------------------------------------------
-  // Tapping "Trip: N saved" lists what this trip saved, newest at the top,
-  // numbered in the order it went in. Tapping one edits it, then comes
-  // back here.
+  // Tapping "Trip: N saved" lists what the household's current trip has
+  // saved, newest at the top, numbered in the order it went in. It re-reads
+  // every 10 seconds while open, so two people scanning see each other's
+  // items. Tapping a row edits that item, then comes back here.
   var editFromTrip = false;
+  var tripPoll = null;
+  var lastTripJSON = '';
+  var TRIP_POLL_MS = 10000;
 
   function hideTripView() {
     document.getElementById('tripView').hidden = true;
     document.getElementById('itemForm').hidden = false;
     editFromTrip = false;
+    clearInterval(tripPoll);
+    tripPoll = null;
     if (!editingItemId) document.getElementById('sheetTitle').textContent = 'Log a purchase';
   }
 
-  function tripRowText(item) {
+  function tripRowText(entry, showWho) {
     var parts = [];
-    parts.push('×' + item.quantity + (item.unit ? ' ' + item.unit : ''));
-    parts.push(item.location || 'no location');
-    parts.push(item.expiration_date ? 'expires ' + shortDate(isoToDate(item.expiration_date)) : 'no expiry');
+    parts.push('×' + entry.quantity + (entry.unit ? ' ' + entry.unit : ''));
+    parts.push(entry.location || 'no location');
+    parts.push(entry.expiration_date ? 'expires ' + shortDate(isoToDate(entry.expiration_date)) : 'no expiry');
+    if (showWho && entry.added_by) parts.push(entry.added_by);
     return parts.join(' · ');
+  }
+
+  function renderTripList(trip) {
+    var json = JSON.stringify(trip);
+    if (json === lastTripJSON) return;
+    lastTripJSON = json;
+    var list = document.getElementById('tripList');
+    var bought = trip ? trip.entries.filter(function (e) { return e.bought_at; }) : [];
+    list.textContent = '';
+    document.getElementById('tripEmpty').hidden = bought.length > 0;
+    document.getElementById('endTripBtn').disabled = !trip;
+    // Who added each item, once more than one person has.
+    var people = {};
+    bought.forEach(function (e) { if (e.added_by) people[e.added_by] = true; });
+    var showWho = Object.keys(people).length > 1;
+    bought.forEach(function (entry, i) {
+      var li = document.createElement('li');
+      li.value = bought.length - i;
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'trip-row' + (entry.deleted ? ' gone' : '');
+      var name = document.createElement('span');
+      name.className = 'trip-name';
+      name.textContent = entry.name;
+      var detail = document.createElement('span');
+      detail.className = 'trip-detail';
+      detail.textContent = entry.deleted ? 'Deleted' : tripRowText(entry, showWho);
+      b.appendChild(name);
+      b.appendChild(detail);
+      if (entry.deleted) b.disabled = true;
+      else b.addEventListener('click', function () { editTripItem(entry.item_id); });
+      li.appendChild(b);
+      list.appendChild(li);
+    });
+  }
+
+  function editTripItem(id) {
+    apiFetch('/items/' + id).then(function (item) { startEdit(item, true); })
+      .catch(function (err) { alert(err.message); });
+  }
+
+  function readTrip() {
+    loadCurrentTrip().then(renderTripList).catch(function () {});
   }
 
   function showTripView() {
@@ -2077,47 +2138,12 @@
     document.getElementById('itemForm').hidden = true;
     document.getElementById('tripView').hidden = false;
     document.getElementById('sheetTitle').textContent = 'This trip';
-    var list = document.getElementById('tripList');
-    var t = loadTrip();
-    list.textContent = '';
-    var empty = document.getElementById('tripEmpty');
-    empty.hidden = t.ids.length > 0;
-    // A trip begun before the list existed has a count but no ids.
-    empty.textContent = t.count ? 'Items saved before this list was added can\'t be shown. End the trip to start a new one.'
-      : 'Nothing saved this trip yet.';
-    if (!t.ids.length) return;
-    // Every status: something saved this trip may already be used up.
-    apiFetch('/items').then(function (items) {
-      var byId = {};
-      items.forEach(function (it) { byId[it.id] = it; });
-      list.textContent = '';
-      list.start = t.ids.length;
-      t.ids.slice().reverse().forEach(function (id, i) {
-        var item = byId[id];
-        var li = document.createElement('li');
-        li.value = t.ids.length - i;
-        if (!item) {
-          li.className = 'trip-row gone';
-          li.textContent = 'Deleted';
-          list.appendChild(li);
-          return;
-        }
-        var b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'trip-row';
-        var name = document.createElement('span');
-        name.className = 'trip-name';
-        name.textContent = item.name;
-        var detail = document.createElement('span');
-        detail.className = 'trip-detail';
-        detail.textContent = tripRowText(item);
-        b.appendChild(name);
-        b.appendChild(detail);
-        b.addEventListener('click', function () { startEdit(item, true); });
-        li.appendChild(b);
-        list.appendChild(li);
-      });
-    }).catch(function (err) { alert(err.message); });
+    lastTripJSON = '';
+    readTrip();
+    clearInterval(tripPoll);
+    tripPoll = setInterval(function () {
+      if (!document.hidden) readTrip();
+    }, TRIP_POLL_MS);
   }
 
   document.getElementById('tripCount').addEventListener('click', showTripView);
@@ -2127,10 +2153,13 @@
     document.getElementById('f-name').focus();
   });
   document.getElementById('endTripBtn').addEventListener('click', function () {
-    if (!window.confirm('End this trip? The items stay saved; the count starts again at 0.')) return;
-    try { localStorage.removeItem('trip'); } catch (e) {}
-    hideTripView();
-    resetItemForm();
+    if (!currentTrip) return;
+    if (!window.confirm('End this trip for everyone? The items stay saved; the next one saved starts a new trip.')) return;
+    apiFetch('/trips/' + encodeURIComponent(currentTrip.id) + '/end', { method: 'POST' }).then(function () {
+      currentTrip = null;
+      hideTripView();
+      resetItemForm();
+    }).catch(function (err) { alert(err.message); });
   });
 
   // Save & scan next: a whole shopping trip goes in one after another.
@@ -2244,4 +2273,5 @@
   setDefaultPurchaseDate();
   loadWhoAmI();
   refresh();
+  loadCurrentTrip().catch(function () {});
 })();

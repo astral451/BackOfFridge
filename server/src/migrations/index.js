@@ -7,4 +7,5 @@ module.exports = [
   { version: 3, name: 'purchased_quantity', up: require('./003_purchased_quantity') },
   { version: 4, name: 'prev_fill_percent', up: require('./004_prev_fill_percent') },
   { version: 5, name: 'barcodes', up: require('./005_barcodes') },
+  { version: 6, name: 'trips', up: require('./006_trips') },
 ];

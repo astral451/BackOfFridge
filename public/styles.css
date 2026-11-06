@@ -526,7 +526,7 @@ body.sheet-open { overflow: hidden; }
   text-align: left;
   cursor: pointer;
 }
-li.trip-row.gone { color: var(--muted); font-style: italic; }
+.trip-row.gone { color: var(--muted); font-style: italic; cursor: default; }
 .trip-name { font-weight: 600; }
 .trip-detail { font-size: 0.82rem; color: var(--muted); }
 .card-input, .product-box input, .barcode-row input {

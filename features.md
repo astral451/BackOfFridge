@@ -624,7 +624,7 @@ priority — a Low item isn't necessarily more worth doing than a High one.
     or, with no date, on the tab that matches its category.
   - Both the light and dark themes.
 - **Trips: shared shopping trips and the shopping list (Medium/High;
-  proposed design, 2026-11-06, waiting on the user's review)** — grows
+  designed 2026-11-06, being built on `claude/barcode-scanning`)** — grows
   the trip list (see "Quick entry card", Progress) into its own part of
   the app, separate from the inventory. A trip is one shopping run; a
   shopping list is a trip that hasn't started yet. Both use the trip
@@ -644,9 +644,10 @@ priority — a Low item isn't necessarily more worth doing than a High one.
   - **Scanning in the store turns the list into the current trip.**
 
   **Proposed data model (migration 006).**
-  - `trips`: `id`, `household_id`, `status` (`planned` / `active` /
+  - `trips`: `id` (a random UUID, so more than one list can come later
+    without changing anything), `household_id`, `status` (`planned` / `active` /
     `done`), `created_by`, `created_at`, `started_at`, `ended_at`.
-  - `trip_entries`: `id`, `trip_id`, `household_id`, `name`, `barcode`
+  - `trip_entries`: `id`, `trip_id` (the UUID), `household_id`, `name`, `barcode`
     (nullable), `quantity` (wanted, nullable), `source` (`used`,
     `low_stock`, `expiring`, `manual`, or null for something just
     bought), `item_id` (the item saved, null until bought), `added_by`,
@@ -672,9 +673,10 @@ priority — a Low item isn't necessarily more worth doing than a High one.
     - **Expiring** in the next 3 days (replace it before it goes).
     Plus a name box to add anything else, with suggestions from the
     household's products. Already on the list = not suggested.
-  - *List to trip.* The first item saved while a shopping list exists
-    and no trip is active makes that list the active trip (no extra
-    button needed; "Start shopping" could be added if wanted).
+  - *List to trip.* **Start shopping** on the shopping list makes it the
+    active trip (decided 2026-11-06). Saving with no active trip starts
+    a new, empty one, as now; the list stays planned until Start
+    shopping.
   - *Ticking off.* A save whose barcode or name matches a list row ticks
     it (sets `item_id`). A near match (the existing name matcher) asks
     "Is this the 2% milk on your list?" in the card. A row can also be
@@ -697,10 +699,27 @@ priority — a Low item isn't necessarily more worth doing than a High one.
   3. The shopping list: suggestions, picking, adding by name.
   4. List to trip, auto-ticking, "Still to get".
 
-  **To confirm with the user:** one list at a time (vs. several, e.g.
-  per store); the first save starting the trip automatically; the 14-day
-  and 3-day windows; whether quantities matter on the list or a name is
-  enough.
+  **Progress:**
+  - **Step 1 built (2026-11-06): shared trips on the server.** Migration
+    006 (`trips`, `trip_entries`); `src/trips.js`; `GET
+    /api/trips/current`, `POST /api/trips/:id/end`. The card saves with
+    `trip: true`, which puts the item on the household's active trip
+    (starting one) and returns `{ id, count }`. The trip page reads the
+    server and re-reads every 10 s while open; once two people have
+    added, each row names who. A row shows the item as it is now, or
+    "Deleted". End trip ends it for everyone. Idle trips end after 3
+    hours, checked whenever the trip is read. "Same as the last item"
+    stays per phone (localStorage `lastLocation`), since two people may
+    unpack into different rooms. The old per-phone trip is removed.
+
+  **Decided (2026-11-06):**
+  - **One list at a time**, but each trip has its own UUID so several
+    could be supported later. One big list is how the user shops: what's
+    found at the first store gets ticked there, the rest carries on.
+  - **"Start shopping"** button on the list, not automatic.
+  - **Low stock** is the existing `low_stock` flag; **Expiring** is the
+    next 3 days. Used up: 14 days (not objected to).
+  - **Quantities on the list are optional**, useful for a recipe.
 - **Quantity model: purchased amount and per-unit fill level (Low → Medium,
   two steps)** — two related fixes to what an item's `quantity` means,
   planned together but built in order. Step 1 is small, fixes a bug in use

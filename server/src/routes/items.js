@@ -1,5 +1,6 @@
 const express = require('express');
 const store = require('../store');
+const trips = require('../trips');
 const { requirePermission } = require('../permissions');
 const { log } = require('../logger');
 const { interpret } = require('../barcode');
@@ -121,7 +122,11 @@ router.post('/', requirePermission('items:write'), (req, res) => {
   if (row.barcode) purchaseDetail.barcode = row.barcode;
   store.recordEvent(req.householdId, row.id, row.name, 'purchased', purchaseDetail, req.username);
   log(`PURCHASED "${row.name}" x${row.quantity}${row.unit ? ' ' + row.unit : ''} -> ${row.location || 'unspecified location'} by ${req.username}`);
-  res.status(201).json(serialize(row));
+  // The entry card sends trip: true, so the item joins the household's
+  // current shopping trip (started here if there isn't one).
+  const body = serialize(row);
+  if (req.body.trip === true) body.trip = trips.recordBought(req.householdId, row, req.username);
+  res.status(201).json(body);
 });
 
 router.patch('/:id', requirePermission('items:write'), (req, res) => {
